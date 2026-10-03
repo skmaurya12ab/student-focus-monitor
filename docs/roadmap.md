@@ -2,6 +2,10 @@
 
 This document outlines the sequential development phases of the Student Focus Monitor project.
 
+The project consists of **15 total phases** (Phase 0 through Phase 14):
+- **Phase 0** is the architecture and specification phase.
+- **Phases 1 through 14** are the implementation phases.
+
 ---
 
 ## Phases Overview

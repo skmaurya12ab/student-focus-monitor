@@ -186,6 +186,8 @@ npm run build
 
 ## 🗺️ Roadmap & Future Phases
 
+The project consists of **15 total phases** (Phase 0 through Phase 14), where Phase 0 is the architecture and specification phase, and Phases 1 through 14 are implementation phases:
+
 - **Phase 0** — Architecture and specification
 - **Phase 1** — Project bootstrap *(Current)*
 - **Phase 2** — Detection engine refactor
