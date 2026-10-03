@@ -33,7 +33,7 @@
   
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --sidebar-width: 86px;
-  --content-max-width: 1220px;
+  --content-max-width: 1720px;
 }
 
 /* Reset & Base Setup */
@@ -192,9 +192,10 @@ html, body {
   flex: 1;
   min-height: 100vh;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   padding: 40px 72px 72px 72px;
   background-color: var(--bg-page);
+  width: calc(100% - var(--sidebar-width));
 }
 
 .sfm-page {
