@@ -1336,6 +1336,268 @@ html, body {
 }
 
 /* ==========================================================================
+   05 Dedicated Account & Identity Page
+   ========================================================================== */
+.sfm-session-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.sfm-status-dot-active {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #2ED573;
+}
+
+.sfm-account-profile-card {
+  padding: 28px 32px;
+}
+
+.sfm-account-profile-body {
+  display: flex;
+  gap: 36px;
+  align-items: flex-start;
+  margin-top: 16px;
+}
+
+.sfm-account-avatar-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.sfm-account-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.sfm-tag-student {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background-color: #F3F4F6;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.sfm-tag-status {
+  font-size: 11px;
+  font-weight: 700;
+  color: #10B981;
+  background-color: #ECFDF5;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.sfm-account-edit-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sfm-form-row {
+  display: flex;
+  gap: 24px;
+}
+
+.sfm-form-row-compact {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.sfm-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.sfm-input-action-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.sfm-text-input {
+  flex: 1;
+  max-width: 420px;
+  height: 40px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0 14px;
+  font-family: var(--font-family);
+  font-size: 14px;
+  color: var(--text-primary);
+  background-color: #FFFFFF;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.sfm-text-input:focus {
+  border-color: var(--text-primary);
+}
+
+.sfm-field-error {
+  color: var(--color-red);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.sfm-email-verified-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 14px;
+  background-color: #F9FAFB;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  max-width: 420px;
+}
+
+.sfm-email-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.sfm-badge-verified {
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  background-color: #D1FAE5;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.sfm-static-value {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.sfm-identity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.sfm-identity-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.sfm-identity-item:last-child {
+  border-bottom: none;
+}
+
+.sfm-identity-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.sfm-identity-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.sfm-provider-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: #F8F9FA;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.sfm-code-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sfm-privacy-box {
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 8px;
+}
+
+.sfm-privacy-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.sfm-privacy-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.sfm-account-actions-card {
+  padding: 24px 32px;
+}
+
+.sfm-account-actions-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sfm-actions-info .sfm-card-heading {
+  margin-bottom: 4px;
+}
+
+.sfm-btn-logout {
+  background-color: #FEE2E2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+  border-radius: var(--radius-button);
+  padding: 9px 22px;
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sfm-btn-logout:hover {
+  background-color: #FCA5A5;
+  color: #991B1B;
+}
+
+/* ==========================================================================
    Responsive Adaptations
    ========================================================================== */
 @media (max-width: 1120px) {

@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { SettingsData } from '../../types/dashboard';
 import { ExportCloverIcon, ChevronDownIcon } from '../../components/common/Icons';
+import { useAuth } from '../../context/AuthContext';
 
 interface SettingsPageProps {
   data: SettingsData;
+  onNavigateToAccount?: () => void;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ data }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ data, onNavigateToAccount }) => {
+  const { user } = useAuth();
   const [thresholds, setThresholds] = useState(data.thresholds);
   const [notifications, setNotifications] = useState(data.notifications);
   const [cameraDevice, setCameraDevice] = useState(data.webcam.selectedDevice);
@@ -198,16 +201,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ data }) => {
           <div className="sfm-profile-body">
             <div className="sfm-profile-left">
               <div className="sfm-profile-avatar-large" aria-label="Profile initial">
-                <span>{data.profile.initial}</span>
+                <span>{user?.displayName ? user.displayName.charAt(0).toUpperCase() : data.profile.initial}</span>
               </div>
               <div className="sfm-profile-meta">
-                <span className="sfm-profile-name">{data.profile.name}</span>
+                <span className="sfm-profile-name">{user?.displayName || data.profile.name}</span>
                 <span className="sfm-profile-account">{data.profile.accountType}</span>
               </div>
             </div>
 
             <div className="sfm-profile-actions">
-              <button type="button" className="sfm-btn-secondary" id="btn-edit-profile">
+              <button
+                type="button"
+                className="sfm-btn-secondary"
+                id="btn-edit-profile"
+                onClick={onNavigateToAccount}
+                title="Go to Account settings"
+              >
                 Edit profile
               </button>
               <button

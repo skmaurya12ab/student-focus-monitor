@@ -2,7 +2,7 @@
  * Typed interfaces for Student Focus Monitor Dashboard (Phase 3 Figma Frontend)
  */
 
-export type NavigationTab = 'home' | 'analytics' | 'sessions' | 'settings';
+export type NavigationTab = 'home' | 'analytics' | 'sessions' | 'settings' | 'account';
 
 export interface RouteItem {
   id: NavigationTab;
