@@ -1,34 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { fetchAccountDetails } from '../../services/authApi';
+import { fetchAccountDetails, getGoogleAuthUrl } from '../../services/authApi';
 import { AccountDetails } from '../../types/auth';
 import { ExportCloverIcon, GoogleGIcon } from '../../components/common/Icons';
 
 export const AccountPage: React.FC = () => {
-  const { user, updateProfileName, logout } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    isBackendUnavailable,
+    updateProfileName,
+    loginDev,
+    logout,
+    refreshUser,
+  } = useAuth();
+
   const [accountDetails, setAccountDetails] = useState<AccountDetails | null>(null);
   const [displayNameInput, setDisplayNameInput] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+  const [isDevLoggingIn, setIsDevLoggingIn] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
       setDisplayNameInput(user.displayName);
+    } else {
+      setDisplayNameInput('');
     }
   }, [user]);
 
   useEffect(() => {
     let isMounted = true;
     const loadDetails = async () => {
+      if (!isAuthenticated) {
+        setAccountDetails(null);
+        return;
+      }
       try {
         const details = await fetchAccountDetails();
         if (isMounted) {
           setAccountDetails(details);
         }
       } catch {
-        // Fall back gracefully if unauthenticated or offline
+        if (isMounted) {
+          setAccountDetails(null);
+        }
       }
     };
 
@@ -36,7 +55,7 @@ export const AccountPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [isAuthenticated, user]);
 
   const handleSaveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,13 +82,42 @@ export const AccountPage: React.FC = () => {
     try {
       setIsLoggingOut(true);
       await logout();
+      setAccountDetails(null);
     } finally {
       setIsLoggingOut(false);
     }
   };
 
-  const avatarInitial = user?.displayName ? user.displayName.charAt(0).toUpperCase() : 'S';
-  const emailDisplay = user?.email || 'saurabh@example.com';
+  const handleDevLogin = async () => {
+    try {
+      setIsDevLoggingIn(true);
+      setAuthError(null);
+      await loginDev('saurabh@example.com', 'Saurabh Kumar');
+    } catch (err: any) {
+      setAuthError(err.message || 'Development login failed');
+    } finally {
+      setIsDevLoggingIn(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setAuthError(null);
+      const authData = await getGoogleAuthUrl();
+      if (authData?.url) {
+        window.location.href = authData.url;
+      } else {
+        setAuthError('Google OAuth is not configured on this server.');
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Failed to initiate Google OAuth flow.');
+    }
+  };
+
+  const avatarInitial = user?.displayName
+    ? user.displayName.charAt(0).toUpperCase()
+    : 'G';
+
   const googleIdentity = accountDetails?.identities.find((id) => id.provider === 'google');
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString('en-US', {
@@ -77,16 +125,29 @@ export const AccountPage: React.FC = () => {
         day: 'numeric',
         year: 'numeric',
       })
-    : 'Aug 17, 2026';
+    : '—';
   const lastLogin = googleIdentity?.lastLoginAt
     ? new Date(googleIdentity.lastLoginAt).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
       })
-    : 'Today';
+    : '—';
 
   return (
     <div className="sfm-page sfm-account-page" id="account-page">
+      {/* Offline Alert Banner */}
+      {isBackendUnavailable && (
+        <div className="sfm-account-banner sfm-account-banner-offline" role="alert">
+          <span>
+            ⚠️ <strong>Backend Offline:</strong> Cannot connect to backend service at{' '}
+            <code>http://localhost:8000</code>. Ensure the FastAPI server is running.
+          </span>
+          <button type="button" className="sfm-btn-retry" onClick={refreshUser}>
+            Retry Connection
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
       <header className="sfm-page-header">
         <div className="sfm-header-left">
@@ -103,8 +164,22 @@ export const AccountPage: React.FC = () => {
 
         <div className="sfm-header-right">
           <div className="sfm-session-status-badge" aria-label="Current session state">
-            <span className="sfm-status-dot-active" />
-            <span>{user ? 'Session Active' : 'Offline'}</span>
+            {isBackendUnavailable ? (
+              <>
+                <span className="sfm-status-dot-offline" />
+                <span>Backend Offline</span>
+              </>
+            ) : isAuthenticated ? (
+              <>
+                <span className="sfm-status-dot-active" />
+                <span>Session Active</span>
+              </>
+            ) : (
+              <>
+                <span className="sfm-status-dot-inactive" />
+                <span>Not Signed In</span>
+              </>
+            )}
           </div>
 
           <button
@@ -140,56 +215,84 @@ export const AccountPage: React.FC = () => {
                 <span>{avatarInitial}</span>
               </div>
               <div className="sfm-account-tags">
-                <span className="sfm-tag-student">Student Account</span>
-                <span className="sfm-tag-status">Active</span>
+                <span className="sfm-tag-student">
+                  {isAuthenticated ? 'Student Account' : 'Guest Account'}
+                </span>
+                <span className={isAuthenticated ? 'sfm-tag-status' : 'sfm-tag-unlinked'}>
+                  {isAuthenticated ? 'Active' : 'Unauthenticated'}
+                </span>
               </div>
             </div>
 
-            <form onSubmit={handleSaveName} className="sfm-account-edit-form">
-              <div className="sfm-form-row">
-                <div className="sfm-form-field">
-                  <label htmlFor="account-display-name-input" className="sfm-input-label">
-                    Display Name
-                  </label>
-                  <div className="sfm-input-action-group">
-                    <input
-                      id="account-display-name-input"
-                      type="text"
-                      className="sfm-text-input"
-                      value={displayNameInput}
-                      onChange={(e) => setDisplayNameInput(e.target.value)}
-                      maxLength={100}
-                      placeholder="Enter student display name"
-                      aria-required="true"
-                    />
-                    <button
-                      type="submit"
-                      className="sfm-btn-save-changes"
-                      id="btn-save-account-name"
-                      disabled={isSaving || !displayNameInput.trim()}
-                    >
-                      {saveSuccess ? 'Saved ✓' : isSaving ? 'Saving...' : 'Save changes'}
-                    </button>
-                  </div>
-                  {saveError && <p className="sfm-field-error">{saveError}</p>}
-                </div>
-              </div>
-
-              <div className="sfm-form-row sfm-form-row-compact">
-                <div className="sfm-form-field">
-                  <span className="sfm-input-label">Primary Account Email</span>
-                  <div className="sfm-email-verified-box">
-                    <span className="sfm-email-value">{emailDisplay}</span>
-                    <span className="sfm-badge-verified">✓ Google Verified</span>
+            {isAuthenticated ? (
+              <form onSubmit={handleSaveName} className="sfm-account-edit-form">
+                <div className="sfm-form-row">
+                  <div className="sfm-form-field">
+                    <label htmlFor="account-display-name-input" className="sfm-input-label">
+                      Display Name
+                    </label>
+                    <div className="sfm-input-action-group">
+                      <input
+                        id="account-display-name-input"
+                        type="text"
+                        className="sfm-text-input"
+                        value={displayNameInput}
+                        onChange={(e) => setDisplayNameInput(e.target.value)}
+                        maxLength={100}
+                        placeholder="Enter student display name"
+                        aria-required="true"
+                      />
+                      <button
+                        type="submit"
+                        className="sfm-btn-save-changes"
+                        id="btn-save-account-name"
+                        disabled={isSaving || !displayNameInput.trim()}
+                      >
+                        {saveSuccess ? 'Saved ✓' : isSaving ? 'Saving...' : 'Save changes'}
+                      </button>
+                    </div>
+                    {saveError && <p className="sfm-field-error">{saveError}</p>}
                   </div>
                 </div>
 
-                <div className="sfm-form-field">
-                  <span className="sfm-input-label">Member Since</span>
-                  <span className="sfm-static-value">{memberSince}</span>
+                <div className="sfm-form-row sfm-form-row-compact">
+                  <div className="sfm-form-field">
+                    <span className="sfm-input-label">Primary Account Email</span>
+                    <div className="sfm-email-verified-box">
+                      <span className="sfm-email-value">{user?.email || 'No email attached'}</span>
+                      <span className="sfm-badge-verified">✓ Google Verified</span>
+                    </div>
+                  </div>
+
+                  <div className="sfm-form-field">
+                    <span className="sfm-input-label">Member Since</span>
+                    <span className="sfm-static-value">{memberSince}</span>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <div className="sfm-account-edit-form">
+                <div className="sfm-guest-notice">
+                  You are currently viewing the application in guest mode. Sign in with Google or
+                  use the Quick Dev Login below to establish a secure application session and load
+                  your student profile.
+                </div>
+                <div className="sfm-form-row sfm-form-row-compact">
+                  <div className="sfm-form-field">
+                    <span className="sfm-input-label">Primary Account Email</span>
+                    <div className="sfm-email-verified-box">
+                      <span className="sfm-email-value">None</span>
+                      <span className="sfm-badge-unauthenticated">Not Authenticated</span>
+                    </div>
+                  </div>
+
+                  <div className="sfm-form-field">
+                    <span className="sfm-input-label">Member Since</span>
+                    <span className="sfm-static-value">—</span>
+                  </div>
                 </div>
               </div>
-            </form>
+            )}
           </div>
         </section>
 
@@ -216,7 +319,11 @@ export const AccountPage: React.FC = () => {
 
               <div className="sfm-identity-item">
                 <span className="sfm-identity-label">Linked Google Account</span>
-                <span className="sfm-identity-value">{emailDisplay}</span>
+                <span className="sfm-identity-value">
+                  {isAuthenticated && (googleIdentity?.providerEmail || user?.email)
+                    ? googleIdentity?.providerEmail || user?.email
+                    : 'None linked'}
+                </span>
               </div>
 
               <div className="sfm-identity-item">
@@ -226,7 +333,11 @@ export const AccountPage: React.FC = () => {
 
               <div className="sfm-identity-item">
                 <span className="sfm-identity-label">Verification Status</span>
-                <span className="sfm-badge-verified">Linked & Verified</span>
+                {isAuthenticated && googleIdentity ? (
+                  <span className="sfm-badge-verified">Linked & Verified</span>
+                ) : (
+                  <span className="sfm-tag-unlinked">Not Connected</span>
+                )}
               </div>
             </div>
           </section>
@@ -244,7 +355,9 @@ export const AccountPage: React.FC = () => {
             <div className="sfm-identity-list">
               <div className="sfm-identity-item">
                 <span className="sfm-identity-label">Session Protection</span>
-                <span className="sfm-identity-value">Secure HttpOnly Cookie</span>
+                <span className="sfm-identity-value">
+                  {isAuthenticated ? 'Secure HttpOnly Cookie' : 'No Active Session'}
+                </span>
               </div>
 
               <div className="sfm-identity-item">
@@ -273,23 +386,50 @@ export const AccountPage: React.FC = () => {
           <div className="sfm-account-actions-content">
             <div className="sfm-actions-info">
               <h2 id="account-actions-heading" className="sfm-card-heading">
-                Account Actions
+                {isAuthenticated ? 'Account Actions' : 'Sign In to Student Account'}
               </h2>
               <p className="sfm-card-subheading">
-                Sign out of your active session or switch student accounts on this device.
+                {isAuthenticated
+                  ? 'Sign out of your active session or switch student accounts on this device.'
+                  : 'Establish an authenticated session using Google OAuth 2.0 or local development login.'}
               </p>
+              {authError && <p className="sfm-field-error">{authError}</p>}
             </div>
 
             <div className="sfm-actions-btns">
-              <button
-                type="button"
-                className="sfm-btn-logout"
-                id="btn-account-logout"
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-              >
-                {isLoggingOut ? 'Signing out...' : 'Sign out'}
-              </button>
+              {isAuthenticated ? (
+                <button
+                  type="button"
+                  className="sfm-btn-logout"
+                  id="btn-account-logout"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                >
+                  {isLoggingOut ? 'Signing out...' : 'Sign out'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="sfm-btn-google-login"
+                    id="btn-google-login"
+                    onClick={handleGoogleLogin}
+                  >
+                    <GoogleGIcon size={16} />
+                    <span>Sign in with Google</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="sfm-btn-dev-login"
+                    id="btn-dev-login"
+                    onClick={handleDevLogin}
+                    disabled={isDevLoggingIn}
+                  >
+                    {isDevLoggingIn ? 'Logging in...' : 'Quick Dev Login'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -297,3 +437,4 @@ export const AccountPage: React.FC = () => {
     </div>
   );
 };
+

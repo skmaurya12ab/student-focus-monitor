@@ -12,6 +12,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isBackendUnavailable: boolean;
   error: string | null;
   loginGoogle: (payload: { id_token?: string; code?: string; state?: string }) => Promise<void>;
   loginDev: (email?: string, displayName?: string) => Promise<void>;
@@ -22,19 +23,10 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Default mock student for instant offline or initial rendering fallback
-const DEFAULT_FALLBACK_USER: AuthUser = {
-  id: '00000000-0000-0000-0000-000000000001',
-  displayName: 'Saurabh Kumar',
-  email: 'saurabh@example.com',
-  isActive: true,
-  createdAt: '2026-08-17T08:00:00Z',
-  updatedAt: '2026-08-17T08:00:00Z',
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(DEFAULT_FALLBACK_USER);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isBackendUnavailable, setIsBackendUnavailable] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshUser = useCallback(async () => {
@@ -43,14 +35,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null);
       const currentUser = await fetchCurrentUser();
       setUser(currentUser);
-    } catch {
-      // If unauthenticated or offline, retain fallback user for offline dashboard viewing
-      setUser(DEFAULT_FALLBACK_USER);
+      setIsBackendUnavailable(false);
+    } catch (err: any) {
+      if (err.message === 'BACKEND_UNAVAILABLE') {
+        setIsBackendUnavailable(true);
+      } else {
+        setIsBackendUnavailable(false);
+      }
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   }, []);
-
 
   useEffect(() => {
     refreshUser();
@@ -62,6 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null);
       const authenticatedUser = await loginWithGoogle(payload);
       setUser(authenticatedUser);
+      setIsBackendUnavailable(false);
     } catch (err: any) {
       setError(err.message || 'Google authentication failed');
       throw err;
@@ -76,6 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null);
       const authenticatedUser = await devLogin({ email, display_name: displayName });
       setUser(authenticatedUser);
+      setIsBackendUnavailable(false);
     } catch (err: any) {
       setError(err.message || 'Dev login failed');
       throw err;
@@ -109,8 +107,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user && user.id !== '00000000-0000-0000-0000-000000000001',
+        isAuthenticated: !!user,
         isLoading,
+        isBackendUnavailable,
         error,
         loginGoogle,
         loginDev,
@@ -131,3 +130,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+

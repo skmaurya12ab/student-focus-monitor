@@ -97,47 +97,62 @@ export async function devLogin(payload?: {
  * Fetch the currently authenticated user profile (/api/auth/me) via HttpOnly session cookie.
  */
 export async function fetchCurrentUser(): Promise<AuthUser> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
 
-  if (!response.ok) {
-    throw new Error('Not authenticated');
+    if (!response.ok) {
+      throw new Error(response.status === 401 ? 'Not authenticated' : `HTTP_${response.status}`);
+    }
+
+    const raw = await response.json();
+    return mapUserResponse(raw);
+  } catch (err: any) {
+    if (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+      throw new Error('BACKEND_UNAVAILABLE');
+    }
+    throw err;
   }
-
-  const raw = await response.json();
-  return mapUserResponse(raw);
 }
 
 /**
  * Fetch detailed account information (/api/account) via HttpOnly session cookie.
  */
 export async function fetchAccountDetails(): Promise<AccountDetails> {
-  const response = await fetch(`${API_BASE_URL}/api/account`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/account`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to load account details: ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(response.status === 401 ? 'Not authenticated' : `HTTP_${response.status}`);
+    }
+
+    const raw = await response.json();
+    return {
+      user: mapUserResponse(raw.user),
+      identities: (raw.identities || []).map((id: any) => ({
+        id: id.id,
+        provider: id.provider,
+        providerEmail: id.provider_email,
+        createdAt: id.created_at,
+        lastLoginAt: id.last_login_at,
+      })),
+      activeSessionsCount: raw.active_sessions_count || 0,
+    };
+  } catch (err: any) {
+    if (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+      throw new Error('BACKEND_UNAVAILABLE');
+    }
+    throw err;
   }
-
-  const raw = await response.json();
-  return {
-    user: mapUserResponse(raw.user),
-    identities: (raw.identities || []).map((id: any) => ({
-      id: id.id,
-      provider: id.provider,
-      providerEmail: id.provider_email,
-      createdAt: id.created_at,
-      lastLoginAt: id.last_login_at,
-    })),
-    activeSessionsCount: raw.active_sessions_count || 0,
-  };
 }
+
 
 /**
  * Update editable profile fields (such as display name).

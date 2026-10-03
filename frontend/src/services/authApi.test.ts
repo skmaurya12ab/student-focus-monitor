@@ -192,5 +192,24 @@ describe('authApi client tests (HttpOnly cookie session architecture)', () => {
       }),
     );
   });
+
+  it('translates network connection failure into BACKEND_UNAVAILABLE error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(fetchCurrentUser()).rejects.toThrow('BACKEND_UNAVAILABLE');
+    await expect(fetchAccountDetails()).rejects.toThrow('BACKEND_UNAVAILABLE');
+  });
+
+  it('throws Not authenticated error when endpoint returns 401', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ detail: 'Not authenticated' }),
+    }));
+
+    await expect(fetchCurrentUser()).rejects.toThrow('Not authenticated');
+    await expect(fetchAccountDetails()).rejects.toThrow('Not authenticated');
+  });
 });
+
 

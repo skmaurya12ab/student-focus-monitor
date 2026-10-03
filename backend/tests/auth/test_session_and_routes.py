@@ -148,3 +148,45 @@ async def test_bearer_token_fallback_support(db_session):
 
     app.dependency_overrides.clear()
 
+
+@pytest.mark.asyncio
+async def test_cors_preflight_and_credentials_localhost_5174():
+    """Verify CORS preflight and request headers for frontend development origin http://localhost:5174."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Preflight OPTIONS on protected endpoint
+        preflight_res = await client.options(
+            "/api/account",
+            headers={
+                "Origin": "http://localhost:5174",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert preflight_res.status_code == 200
+        assert preflight_res.headers.get("access-control-allow-origin") == "http://localhost:5174"
+        assert preflight_res.headers.get("access-control-allow-credentials") == "true"
+
+        # Simple request with Origin
+        health_res = await client.get(
+            "/api/health",
+            headers={"Origin": "http://localhost:5174"},
+        )
+        assert health_res.status_code == 200
+        assert health_res.headers.get("access-control-allow-origin") == "http://localhost:5174"
+        assert health_res.headers.get("access-control-allow-credentials") == "true"
+
+
+@pytest.mark.asyncio
+async def test_account_unauthenticated_returns_401(db_session):
+    """Verify /api/account returns 401 when accessed without session cookie."""
+    app.dependency_overrides[get_async_session] = lambda: db_session
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/account")
+        assert res.status_code == 401
+
+    app.dependency_overrides.clear()
+
+
