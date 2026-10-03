@@ -157,6 +157,12 @@ Run specific live transport WebSocket tests:
 pytest tests/websocket/ -v
 ```
 
+Run Phase 8 detection integration tests:
+
+```bash
+pytest tests/detection/test_phase8_detection_integration.py -v
+```
+
 ### Frontend Tests
 
 From the `frontend/` directory:

@@ -136,6 +136,39 @@ Signals client-initiated live transport termination:
 }
 ```
 
+#### Detection Result Message (Phase 8 Real Detection)
+Sent by the backend detection runtime to stream live detector results to the client:
+```json
+{
+  "type": "detection_result",
+  "session_id": "cf7a684c-7c08-41eb-811c-d70ee8740529",
+  "timestamp": 1727967931.50,
+  "state": "calibrating",
+  "active_detections": [
+    {
+      "category": "looking_away",
+      "started_at": 1727967911.50,
+      "duration_seconds": 20.0
+    }
+  ],
+  "new_events": [
+    {
+      "event_id": "14f2e964-b86a-4d7a-8b89-29178ad3a6cc",
+      "category": "looking_away",
+      "started_at": 1727967911.50
+    }
+  ],
+  "ended_events": [],
+  "metrics": {
+    "focus_score": 85.0,
+    "focused_seconds": 120.0,
+    "distracted_seconds": 20.0,
+    "away_seconds": 0.0
+  }
+}
+```
+State values: `"calibrating"`, `"focused"`, `"distracted"`, `"away"`, `"detector_error"`.
+
 ---
 
 ## 4. Connection State Machine
@@ -199,11 +232,11 @@ The client live transport lifecycle is represented by explicit, disjoint states:
 
 ---
 
-## 7. Phase 8 Detector Seam
-
-In Phase 7, `LiveTransportManager` defines an extensible seam for the detection engine:
+## 7. Phase 8 Detector Integration
+In Phase 8, `LiveTransportManager` connects incoming frames directly to `DetectionRuntimeManager.submit_frame`:
 ```python
-# Phase 8 Integration Boundary:
-# detector_hook: Optional[Callable[[bytes, UUID], Awaitable[None]]] = None
+# Phase 8 Integration:
+live_transport_manager.detector_hook = detection_runtime_manager.submit_frame
 ```
-In Phase 7, `detector_hook` is `None`. Incoming frames are purely validated for transport size and discarded. Phase 8 will connect this hook to the MediaPipe detector pipeline without altering WebSocket protocol or authentication.
+Frames are received by the session-scoped detector runtime without modifying transport protocol or auth. The detector worker processes frames asynchronously via MediaPipe and broadcasts structured `detection_result` payloads back over the active WebSocket.
+

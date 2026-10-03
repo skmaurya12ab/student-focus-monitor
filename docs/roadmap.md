@@ -34,8 +34,8 @@ The project consists of **15 total phases** (Phase 0 through Phase 14):
 - **Phase 7 — Camera and realtime transport (Completed)**
   - Implement client-side camera capture (video only, audio strictly excluded), canvas downsampling, bounded pacing (~5 FPS), backpressure protection, and authenticated WebSocket transport (`/api/ws/sessions/{session_id}`). Backend enforces Origin validation, session ownership, active status requirement, single live connection invariant, max frame size limits (1 MB), and frame discarding without media persistence. Defines clean seam for Phase 8 detector.
 
-- **Phase 8 — Real monitoring**
-  - Connect live video frames with the modular detection engine in real-time to compute attention scores and trigger alerts.
+- **Phase 8 — Real monitoring / Real detection (Completed)**
+  - Connect live browser video frames to the modular detection engine in real-time. Employs session-isolated runtimes (`SessionDetectionRuntime`), asynchronous worker execution, bounded backpressure queue (`maxsize=1`, freshest-frame priority), strictly monotonic MediaPipe timestamps, discrete `DetectionEvent` persistence to PostgreSQL on state transitions, session stop metric finalization, and live `detection_result` WebSocket payloads without raw media storage.
 
 - **Phase 9 — Live dashboard integration**
   - Connect frontend monitoring UI with realtime detection streams, audio/visual distraction alerts, and focus state indicators.

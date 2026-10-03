@@ -3,7 +3,11 @@
  * Encapsulates camera acquisition, canvas frame downsampling, paced WebSocket transmission,
  * backpressure control, and reconnect handling.
  */
-import { LiveTransportMetrics, LiveTransportState } from '../types/liveTransport';
+import {
+  LiveTransportMetrics,
+  LiveTransportState,
+  LiveDetectionResult,
+} from '../types/liveTransport';
 
 const DEFAULT_TARGET_FPS = 5;
 const MAX_BUFFERED_AMOUNT_BYTES = 256 * 1024; // 256 KB backpressure limit
@@ -68,6 +72,7 @@ export interface LiveTransportCallbacks {
   onStateChange: (state: LiveTransportState) => void;
   onMetricsUpdate: (metrics: Partial<LiveTransportMetrics>) => void;
   onError: (error: string) => void;
+  onDetectionResult?: (result: LiveDetectionResult) => void;
 }
 
 /**
@@ -182,6 +187,10 @@ export class LiveWebSocketClient {
           bytesReceived: data.bytes_received,
         },
       });
+    } else if (data.type === 'detection_result') {
+      if (this.callbacks.onDetectionResult) {
+        this.callbacks.onDetectionResult(data as LiveDetectionResult);
+      }
     } else if (data.type === 'closed') {
       this.disconnect('Server closed transport');
     }

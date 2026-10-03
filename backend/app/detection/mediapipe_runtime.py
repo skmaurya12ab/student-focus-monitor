@@ -89,6 +89,7 @@ class MediaPipeRuntime:
         self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
             pose_options
         )
+        self._last_timestamp_ms: int = -1
 
     def detect(
         self,
@@ -99,6 +100,10 @@ class MediaPipeRuntime:
         Run synchronous landmark detection for video frames.
         Returns (face_result, hand_result, pose_result).
         """
+        if timestamp_ms <= self._last_timestamp_ms:
+            timestamp_ms = self._last_timestamp_ms + 1
+        self._last_timestamp_ms = timestamp_ms
+
         mp_image = self.mp.Image(
             image_format=self.mp.ImageFormat.SRGB,
             data=rgb_frame,

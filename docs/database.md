@@ -365,8 +365,8 @@ pytest tests/db -v
 | **Phase 4 (CURRENT)** | PostgreSQL schema, SQLAlchemy 2.x models, Alembic migrations, database-level constraints, foreign keys, telemetry structure, privacy tests. |
 | **Phase 5 (FUTURE)** | Google OAuth 2.0 / OpenID Connect authentication flow, JWT tokens, session credentials. Uses `users` and `auth_identities`. |
 | **Phase 6 (FUTURE)** | Study session REST APIs (`/sessions/start`, `/sessions/stop`), session accounting persistence. Uses `study_sessions`. |
-| **Phase 7 (FUTURE)** | WebRTC / WebSocket low-latency transport for frame streaming between React frontend and FastAPI backend. |
-| **Phase 8 (FUTURE)** | Real monitoring orchestrator connecting frame transport with the modular detection engine. |
+| **Phase 7 (COMPLETED)** | WebRTC / WebSocket low-latency transport for frame streaming between React frontend and FastAPI backend. |
+| **Phase 8 (COMPLETED)** | Real monitoring orchestrator connecting frame transport with the modular detection engine; discrete DetectionEvent persistence. |
 | **Phase 10 (FUTURE)** | Session history, attention trends, and analytics aggregation endpoints. |
 | **Phase 11 (FUTURE)** | Anonymized telemetry export and user feedback UI/endpoints. Uses `session_feedback`. |
 | **Phase 12–14 (FUTURE)** | Machine learning dataset extraction, offline model training, and ML shadow mode inference. |

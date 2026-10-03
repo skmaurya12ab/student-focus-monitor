@@ -36,6 +36,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
     state: liveState,
     videoRef,
     isLive,
+    latestDetection,
     startLiveSession,
     stopLiveSession,
     error: liveError,
@@ -250,11 +251,22 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
         >
           {/* Left Preview Box */}
           <div className="sfm-video-preview-box">
-            <div className={`sfm-live-indicator is-${liveState}`} id="live-transport-indicator">
+            <div
+              className={`sfm-live-indicator is-${
+                isLive && latestDetection?.state ? latestDetection.state : liveState
+              }`}
+              id="live-transport-indicator"
+            >
               <span className={`sfm-live-dot ${isLive ? 'is-pulsing' : ''}`}>●</span>
               <span className="sfm-live-text" id="live-transport-status-text">
                 {isLive
-                  ? 'LIVE'
+                  ? (latestDetection?.state
+                      ? (latestDetection.state === 'calibrating'
+                          ? 'CALIBRATING'
+                          : latestDetection.active_detections && latestDetection.active_detections.length > 0
+                          ? latestDetection.active_detections[0].alert_name.toUpperCase()
+                          : latestDetection.state.toUpperCase())
+                      : 'LIVE')
                   : liveState === 'connecting'
                   ? 'CONNECTING'
                   : liveState === 'starting_camera'

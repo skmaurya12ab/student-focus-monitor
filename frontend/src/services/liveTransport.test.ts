@@ -180,4 +180,68 @@ describe('liveTransport unit tests (Phase 7 Camera + WebSocket)', () => {
       }, 50);
     });
   });
+
+  it('LiveWebSocketClient dispatches onDetectionResult upon receiving detection_result payload', () => {
+    let receivedDetection: any = null;
+
+    class DetectionWebSocket {
+      onopen: (() => void) | null = null;
+      onmessage: ((ev: any) => void) | null = null;
+      onclose: ((ev: any) => void) | null = null;
+      close = vi.fn();
+
+      constructor() {
+        setTimeout(() => {
+          if (this.onopen) this.onopen();
+          if (this.onmessage) {
+            this.onmessage({
+              data: JSON.stringify({
+                type: 'detection_result',
+                session_id: 'd47ac10b-58cc-4372-a567-0e02b2c3d479',
+                timestamp: 1727967900.0,
+                state: 'calibrating',
+                active_detections: [],
+                metrics: {
+                  focus_score: 100.0,
+                  focused_seconds: 0.0,
+                  distracted_seconds: 0.0,
+                  away_seconds: 0.0,
+                  distraction_count: 0,
+                },
+                calibration: {
+                  complete: false,
+                  samples_collected: 10,
+                  required_samples: 30,
+                  baseline: null,
+                },
+              }),
+            });
+          }
+        }, 10);
+      }
+    }
+
+    vi.stubGlobal('WebSocket', DetectionWebSocket);
+
+    const client = new LiveWebSocketClient('d47ac10b-58cc-4372-a567-0e02b2c3d479', {
+      onStateChange: () => {},
+      onMetricsUpdate: () => {},
+      onError: () => {},
+      onDetectionResult: (res) => {
+        receivedDetection = res;
+      },
+    });
+
+    client.connect();
+
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        expect(receivedDetection).not.toBeNull();
+        expect(receivedDetection.type).toBe('detection_result');
+        expect(receivedDetection.state).toBe('calibrating');
+        expect(receivedDetection.metrics.focus_score).toBe(100.0);
+        resolve();
+      }, 50);
+    });
+  });
 });

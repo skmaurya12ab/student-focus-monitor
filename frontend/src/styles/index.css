@@ -569,15 +569,22 @@ html, body {
   line-height: 1;
 }
 
-.sfm-live-indicator.is-connected .sfm-live-dot {
+.sfm-live-indicator.is-connected .sfm-live-dot,
+.sfm-live-indicator.is-focused .sfm-live-dot {
   color: #10B981;
 }
 
 .sfm-live-indicator.is-connecting .sfm-live-dot,
-.sfm-live-indicator.is-starting_camera .sfm-live-dot {
+.sfm-live-indicator.is-starting_camera .sfm-live-dot,
+.sfm-live-indicator.is-calibrating .sfm-live-dot {
   color: #F59E0B;
 }
 
+.sfm-live-indicator.is-distracted .sfm-live-dot {
+  color: #EF4444;
+}
+
+.sfm-live-indicator.is-away .sfm-live-dot,
 .sfm-live-indicator.is-idle .sfm-live-dot,
 .sfm-live-indicator.is-disconnected .sfm-live-dot {
   color: #9CA3AF;

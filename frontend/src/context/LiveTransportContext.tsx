@@ -15,6 +15,7 @@ import React, {
 import {
   LiveTransportState,
   LiveTransportMetrics,
+  LiveDetectionResult,
   LiveTransportContextValue,
 } from '../types/liveTransport';
 import {
@@ -42,6 +43,7 @@ export const LiveTransportProvider: React.FC<{ children: ReactNode }> = ({ child
   const [state, setState] = useState<LiveTransportState>('idle');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [metrics, setMetrics] = useState<LiveTransportMetrics>(initialMetrics);
+  const [latestDetection, setLatestDetection] = useState<LiveDetectionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -81,6 +83,7 @@ export const LiveTransportProvider: React.FC<{ children: ReactNode }> = ({ child
       videoRef.current.srcObject = null;
     }
 
+    setLatestDetection(null);
     setState('idle');
   }, []);
 
@@ -127,6 +130,9 @@ export const LiveTransportProvider: React.FC<{ children: ReactNode }> = ({ child
         },
         onError: (errMessage) => {
           setError(errMessage);
+        },
+        onDetectionResult: (result) => {
+          setLatestDetection(result);
         },
       });
 
@@ -199,6 +205,7 @@ export const LiveTransportProvider: React.FC<{ children: ReactNode }> = ({ child
     stream,
     videoRef: videoRef as React.RefObject<HTMLVideoElement>,
     metrics,
+    latestDetection,
     error,
     isLive: state === 'connected',
     startLiveSession,

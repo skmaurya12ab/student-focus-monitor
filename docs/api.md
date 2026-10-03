@@ -208,12 +208,13 @@ Establishes an ephemeral, bidirectional live transport channel for streaming cam
 
 ---
 
-## 5. Future Compatibility (Phase 8+)
+## 5. Phase 8 Detection & Future Compatibility (Phase 9+)
 
-Phase 6 established the authoritative session container (`id`), and Phase 7 established live transport. In subsequent phases:
-- **Phase 8 (Detection)**: Real MediaPipe detector integration into the live stream using the established `detector_hook` seam.
-- **Phase 9 (Live Dashboard)**: Real-time detection metrics and alerts surfaced in the dashboard.
-- **Phase 10 (Session History)**: Historical session analytics and timeline aggregation.
-- **Phase 11 (Telemetry)**: Telemetry samples will reference `telemetry_samples.session_id`.
-- No fake detection metrics (`focus_score`, `focused_seconds`) or ML logic are fabricated in Phase 7.
+Phase 6 established the authoritative session container (`id`), Phase 7 established live transport, and Phase 8 connected the real MediaPipe detection engine:
+- **Phase 8 (Real Detection — Completed)**: Real MediaPipe detector integration into the live stream using the established `detector_hook` seam. Real `detection_events` are persisted in PostgreSQL, and final session focus scores are calculated upon session stop.
+- **Phase 9 (Live Dashboard — Future)**: Comprehensive UI dashboard redesign, audio/visual distraction alert cards, and real-time focus graphs.
+- **Phase 10 (Session History — Future)**: Historical session analytics and timeline aggregation.
+- **Phase 11 (Telemetry — Future)**: Telemetry samples will reference `telemetry_samples.session_id`.
+- Zero ML or trained neural network models are used; the deterministic v4-lineage rule-based engine is the production detection engine.
+
 

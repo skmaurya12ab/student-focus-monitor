@@ -181,7 +181,7 @@ class StudentDistractionDetector:
 
         self.previous_features = features
         self._maybe_emit_telemetry(features)
-        return self._build_state_payload(features)
+        return self._build_state_payload(features, tracker_results=tracker_results)
 
     def process_results(
         self,
@@ -248,8 +248,19 @@ class StudentDistractionDetector:
         )
         self.telemetry_sink.emit_telemetry(payload)
 
-    def _build_state_payload(self, features: FeatureSnapshot) -> dict[str, Any]:
+    def _build_state_payload(
+        self,
+        features: FeatureSnapshot,
+        tracker_results: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """Build the structured update payload returned to callers per frame."""
+        newly_started = [name for name, r in tracker_results.items() if getattr(r, "just_started", False)] if tracker_results else []
+        newly_ended = [
+            {"name": name, "duration_sec": getattr(r, "duration_sec", None)}
+            for name, r in tracker_results.items()
+            if getattr(r, "just_ended", False)
+        ] if tracker_results else []
+
         return {
             "type": "session_update",
             "session_id": self.session_id,
@@ -262,6 +273,8 @@ class StudentDistractionDetector:
             "distraction_count": self.session_state.distraction_count,
             "active_alerts": features.active_alerts,
             "calibration_complete": self.calibration.complete,
+            "newly_started": newly_started,
+            "newly_ended": newly_ended,
             "features": features.to_dict(),
         }
 

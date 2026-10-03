@@ -134,6 +134,20 @@ class SessionService:
             duration_seconds = 0.0
         session.total_duration_seconds = round(duration_seconds, 2)
 
+        # Phase 8: Finalize detection runtime, open detection events, and session metrics
+        from app.services.detection_runtime_service import detection_runtime_manager
+        detection_summary = await detection_runtime_manager.stop_session_detection(session.id, db)
+        if detection_summary:
+            session.focused_seconds = round(float(detection_summary.get("focused_seconds", 0.0)), 2)
+            session.distracted_seconds = round(float(detection_summary.get("distracted_seconds", 0.0)), 2)
+            session.away_seconds = round(float(detection_summary.get("away_seconds", 0.0)), 2)
+            focus_val = detection_summary.get("focus_score")
+            if focus_val is not None:
+                from decimal import Decimal
+                session.focus_score = Decimal(str(round(float(focus_val), 2)))
+            if detection_summary.get("calibration"):
+                session.calibration_snapshot = detection_summary["calibration"]
+
         await db.commit()
         await db.refresh(session)
 

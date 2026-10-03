@@ -209,3 +209,7 @@ class LiveTransportManager:
 
 # Global singleton instance for live transport management
 live_transport_manager = LiveTransportManager()
+
+# Phase 8: Connect LiveTransportManager detector_hook to DetectionRuntimeManager
+from app.services.detection_runtime_service import detection_runtime_manager
+live_transport_manager.detector_hook = detection_runtime_manager.submit_frame

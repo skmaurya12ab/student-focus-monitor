@@ -145,6 +145,12 @@ async def websocket_session_live_transport(
 
     # 6. Accept connection and emit ready payload
     await websocket.accept()
+
+    # Phase 8: Initialize session detection runtime and register WebSocket callback
+    from app.services.detection_runtime_service import detection_runtime_manager
+    runtime = await detection_runtime_manager.get_or_create_runtime(session_uuid, user.id)
+    runtime.set_result_callback(websocket.send_json)
+
     await websocket.send_json({
         "type": "ready",
         "session_id": str(session_uuid),
@@ -215,4 +221,7 @@ async def websocket_session_live_transport(
     except Exception as e:
         logger.info("WebSocket connection for session %s closed: %s", session_uuid, e)
     finally:
+        active_rt = detection_runtime_manager.get_runtime(session_uuid)
+        if active_rt:
+            active_rt.set_result_callback(None)
         live_transport_manager.unregister_connection(session_uuid, websocket, reason="Clean disconnect")

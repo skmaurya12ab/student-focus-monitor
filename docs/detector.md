@@ -163,16 +163,39 @@ MediaPipe vision tasks (`FaceLandmarker`, `HandLandmarker`, `PoseLandmarker`) ar
 
 ---
 
-## 12. Future FastAPI & Transport Integration
+## 12. Phase 8 Real Detection Integration & Live Runtime
 
-In future phases (Phases 6–8), FastAPI and WebSocket transports will consume the detection engine:
-```python
-# Conceptual future integration pattern:
-detector = StudentDistractionDetector(config=config, session_id=session_id)
+In Phase 8, the modular detection engine is actively connected to the Phase 7 live WebSocket transport (`/api/ws/sessions/{session_id}`):
 
-async for frame in websocket:
-    landmarks = runtime.detect(frame, timestamp_ms)
-    state_payload = detector.process_results(*landmarks, width=w, height=h, timestamp=now)
-    await websocket.send_json(state_payload)
+```text
+Browser Camera (getUserMedia, audio: false)
+      ↓
+JPEG Frame Bytes via WebSocket
+      ↓
+LiveTransportManager (detector_hook)
+      ↓
+DetectionRuntimeManager (Session-scoped isolation)
+      ↓
+SessionDetectionRuntime Worker (asyncio bounded queue, maxsize=1)
+      ↓
+OpenCV Decode & RGB Conversion
+      ↓
+MediaPipeRuntime (Face, Hand, Pose Landmarkers with monotonic timestamps)
+      ↓
+StudentDistractionDetector.process_results(...)
+      ↓
+Event Lifecycle Management (Discrete DetectionEvent creation & finalization)
+      ↓
+PostgreSQL Persistence (detection_events table on state transitions only)
+      ↓
+WebSocket detection_result Emitted to Browser
 ```
-The core engine requires zero modifications to support this async streaming architecture.
+
+### 12.1. Key Phase 8 Architecture Guarantees
+1. **Per-Session State Isolation**: `SessionDetectionRuntime` is strictly tied to `session_id`. Each session maintains its own `StudentDistractionDetector`, `MediaPipeRuntime`, calibration buffer, persistence trackers, and duration counters. Cross-session or cross-student state contamination is impossible.
+2. **Non-Blocking CPU Execution**: MediaPipe inference runs off the asyncio event loop via `asyncio.to_thread` inside a dedicated per-session worker task.
+3. **Bounded Backpressure Queue**: The submission queue is configured with `maxsize=1`. If the detector worker is busy processing a frame, `submit_frame` drops stale frames and enqueues the freshest incoming frame, guaranteeing real-time freshness over processing stale historical frames.
+4. **Controlled DB Persistence Frequency**: Rows in PostgreSQL `detection_events` are inserted ONLY when an alert condition's persistence delay is satisfied (event start) and updated when the condition ends (event end) or session stops. Zero writes occur on raw frames.
+5. **Session Stop Finalization**: Calling `POST /api/sessions/{session_id}/stop` safely stops frame ingestion, finalizes any in-progress distraction events, persists authoritative duration and focus metrics to `study_sessions`, and releases MediaPipe vision resources.
+6. **Privacy Integrity**: Zero image frames, pixels, or screenshots are written to PostgreSQL, disk, or logs. Only canonical categories, timestamps, and numerical metrics are stored.
+
