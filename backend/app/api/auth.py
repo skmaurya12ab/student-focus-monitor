@@ -1,5 +1,6 @@
 """Authentication API endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -10,13 +11,42 @@ from app.schemas.auth import (
     DevLoginRequest,
     GoogleAuthPayload,
     GoogleAuthUrlResponse,
-    TokenResponse,
+    SessionAuthResponse,
 )
 from app.schemas.user import UserResponse
-from app.services.auth_service import AuthService, get_current_user
+from app.services.auth_service import (
+    AuthService,
+    get_current_user,
+    get_optional_current_user,
+)
 from app.services.google_auth import GoogleAuthService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def _set_session_cookie(response: Response, access_token: str) -> None:
+    """Set secure HttpOnly application session cookie."""
+    max_age_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    response.set_cookie(
+        key="sfm_session",
+        value=access_token,
+        max_age=max_age_seconds,
+        httponly=True,
+        secure=(settings.APP_ENV == "production"),
+        samesite="lax",
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    """Clear application session cookie on logout."""
+    response.delete_cookie(
+        key="sfm_session",
+        path="/",
+        httponly=True,
+        secure=(settings.APP_ENV == "production"),
+        samesite="lax",
+    )
 
 
 @router.get(
@@ -32,14 +62,15 @@ def get_google_auth_url() -> GoogleAuthUrlResponse:
 
 @router.post(
     "/google",
-    response_model=TokenResponse,
+    response_model=SessionAuthResponse,
     summary="Authenticate with Google OAuth / ID Token",
 )
 async def authenticate_google(
     payload: GoogleAuthPayload,
+    response: Response,
     db: AsyncSession = Depends(get_async_session),
-) -> TokenResponse:
-    """Verify Google credentials (ID token or auth code), upsert user, and issue application session token."""
+) -> SessionAuthResponse:
+    """Verify Google credentials, authenticate authoritative identity, and set HttpOnly session cookie."""
     id_token = payload.id_token
 
     # If an authorization code was sent from the redirect flow, exchange it
@@ -56,33 +87,32 @@ async def authenticate_google(
     # Verify ID token with Google identity service
     google_claims = await GoogleAuthService.verify_id_token(id_token)
 
-    # Upsert user and auth identity
+    # Authenticate or provision user with authoritative (provider, sub)
     user, identity, is_new = await AuthService.authenticate_or_create_google_user(
         db, google_claims
     )
 
-    # Issue application JWT
+    # Issue application session token and set secure HttpOnly cookie
     access_token = create_access_token(user.id)
-    expires_in_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    _set_session_cookie(response, access_token)
 
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=expires_in_seconds,
+    return SessionAuthResponse(
+        status="success",
         user=UserResponse.model_validate(user),
     )
 
 
 @router.post(
     "/dev-login",
-    response_model=TokenResponse,
+    response_model=SessionAuthResponse,
     summary="Simulated login for development and automated testing",
 )
 async def dev_login(
+    response: Response,
     payload: DevLoginRequest = DevLoginRequest(),
     db: AsyncSession = Depends(get_async_session),
-) -> TokenResponse:
-    """Authenticate or provision a mock Google user without requiring live external OAuth networks."""
+) -> SessionAuthResponse:
+    """Authenticate or provision a mock Google user and set HttpOnly session cookie."""
     mock_claims = {
         "sub": payload.google_sub,
         "email": payload.email,
@@ -95,12 +125,10 @@ async def dev_login(
     )
 
     access_token = create_access_token(user.id)
-    expires_in_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    _set_session_cookie(response, access_token)
 
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=expires_in_seconds,
+    return SessionAuthResponse(
+        status="success",
         user=UserResponse.model_validate(user),
     )
 
@@ -122,11 +150,14 @@ async def get_me(
     summary="Terminate application session",
 )
 async def logout(
-    current_user: User = Depends(get_current_user),
+    response: Response,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ) -> dict:
-    """Invalidate local session for the authenticated user."""
+    """Invalidate application session and clear HttpOnly session cookie."""
+    _clear_session_cookie(response)
     return {
         "status": "success",
         "message": "Successfully logged out.",
-        "user_id": str(current_user.id),
+        "user_id": str(current_user.id) if current_user else None,
     }
+

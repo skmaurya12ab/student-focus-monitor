@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,12 +47,16 @@ class AuthService:
         db: AsyncSession,
         google_claims: Dict[str, Any],
     ) -> Tuple[User, AuthIdentity, bool]:
-        """Authenticate an existing Google user or provision a new user account with default settings."""
+        """Authenticate an existing Google user or provision a new user account.
+        
+        The combination (provider, provider_subject) is authoritative.
+        Automatic account linking based solely on email is strictly prohibited.
+        """
         sub = google_claims["sub"]
         email = google_claims.get("email")
         name = google_claims.get("name") or (email.split("@")[0] if email else "Student")
 
-        # 1. Check for existing AuthIdentity with provider="google" and provider_subject=sub
+        # 1. Authoritative lookup by (provider="google", provider_subject=sub)
         stmt = (
             select(AuthIdentity)
             .options(selectinload(AuthIdentity.user).selectinload(User.settings))
@@ -79,35 +83,32 @@ class AuthService:
             await db.flush()
             return user, identity, False
 
-        # 2. Check if user with same email exists
-        user = None
+        # 2. Strict check: No automatic linking based solely on email address.
+        # If an account already exists with this email under a different external identity,
+        # refuse to link or overwrite it to prevent account hijacking.
         if email:
-            user = await cls.get_user_by_email(db, email)
+            existing_user = await cls.get_user_by_email(db, email)
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An account with this email address already exists. Automatic identity linking by email is disabled.",
+                )
 
-        is_new = False
-        if not user:
-            # 3. Create brand new User
-            user = User(
-                display_name=name,
-                email=email,
-                is_active=True,
-            )
-            db.add(user)
-            await db.flush()  # Generate user.id
-            is_new = True
+        # 3. Create brand new User for this unique Google identity
+        user = User(
+            display_name=name,
+            email=email,
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()  # Generate user.id
 
-            # 4. Create default UserSettings for new user
-            settings = UserSettings(user_id=user.id)
-            db.add(settings)
-            await db.flush()
+        # 4. Create default UserSettings for new user
+        settings = UserSettings(user_id=user.id)
+        db.add(settings)
+        await db.flush()
 
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is deactivated.",
-            )
-
-        # 5. Link Google AuthIdentity
+        # 5. Link authoritative Google AuthIdentity
         identity = AuthIdentity(
             user_id=user.id,
             provider="google",
@@ -118,7 +119,7 @@ class AuthService:
         db.add(identity)
         await db.flush()
 
-        return user, identity, is_new
+        return user, identity, True
 
     @classmethod
     async def get_account_details(
@@ -175,18 +176,27 @@ class AuthService:
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     db: AsyncSession = Depends(get_async_session),
 ) -> User:
-    """FastAPI dependency: Extract and validate Bearer JWT, returning authenticated active User."""
-    if not credentials or not credentials.credentials:
+    """FastAPI dependency: Extract and validate session token from HttpOnly cookie or Bearer header."""
+    token: Optional[str] = None
+
+    # Primary session transport: secure HttpOnly application session cookie
+    if "sfm_session" in request.cookies:
+        token = request.cookies.get("sfm_session")
+    elif credentials and credentials.credentials:
+        token = credentials.credentials
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication credentials were not provided.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_access_token(credentials.credentials)
+    payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -218,3 +228,29 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_optional_current_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    db: AsyncSession = Depends(get_async_session),
+) -> Optional[User]:
+    """FastAPI dependency: Extract authenticated user if available, returning None otherwise."""
+    token: Optional[str] = None
+    if "sfm_session" in request.cookies:
+        token = request.cookies.get("sfm_session")
+    elif credentials and credentials.credentials:
+        token = credentials.credentials
+
+    if not token:
+        return None
+
+    try:
+        payload = decode_access_token(token)
+        if not payload or "sub" not in payload:
+            return None
+        user_uuid = uuid.UUID(payload["sub"])
+        return await AuthService.get_user_by_id(db, user_uuid)
+    except Exception:
+        return None
+

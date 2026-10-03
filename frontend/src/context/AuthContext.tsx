@@ -6,7 +6,6 @@ import {
   devLogin,
   logoutUser,
   updateAccountProfile,
-  getStoredToken,
 } from '../services/authApi';
 
 interface AuthContextType {
@@ -34,33 +33,24 @@ const DEFAULT_FALLBACK_USER: AuthUser = {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    // Provide default fallback user if token is not set yet, or null
-    return getStoredToken() ? null : DEFAULT_FALLBACK_USER;
-  });
+  const [user, setUser] = useState<AuthUser | null>(DEFAULT_FALLBACK_USER);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const refreshUser = useCallback(async () => {
-    const token = getStoredToken();
-    if (!token) {
-      setUser(DEFAULT_FALLBACK_USER);
-      setIsLoading(false);
-      return;
-    }
-
     try {
       setIsLoading(true);
       setError(null);
       const currentUser = await fetchCurrentUser();
       setUser(currentUser);
     } catch {
-      // If token expired or invalid, fall back to default user for UI fidelity
+      // If unauthenticated or offline, retain fallback user for offline dashboard viewing
       setUser(DEFAULT_FALLBACK_USER);
     } finally {
       setIsLoading(false);
     }
   }, []);
+
 
   useEffect(() => {
     refreshUser();

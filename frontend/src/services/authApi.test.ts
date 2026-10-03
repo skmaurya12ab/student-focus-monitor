@@ -1,45 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  getStoredToken,
-  setStoredToken,
-  clearStoredToken,
   getGoogleAuthUrl,
   devLogin,
+  loginWithGoogle,
   fetchCurrentUser,
   fetchAccountDetails,
   updateAccountProfile,
   logoutUser,
 } from './authApi';
 
-describe('authApi client tests', () => {
-  let store: Record<string, string> = {};
-
-  const mockLocalStorage = {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
-      store[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-
+describe('authApi client tests (HttpOnly cookie session architecture)', () => {
   beforeEach(() => {
-    store = {};
-    vi.stubGlobal('localStorage', mockLocalStorage);
-    vi.stubGlobal('window', { location: { pathname: '/' } });
     vi.restoreAllMocks();
-  });
-
-  it('manages token storage in localStorage correctly', () => {
-    expect(getStoredToken()).toBeNull();
-    setStoredToken('test-token-123');
-    expect(getStoredToken()).toBe('test-token-123');
-    clearStoredToken();
-    expect(getStoredToken()).toBeNull();
   });
 
   it('fetches Google OAuth URL successfully', async () => {
@@ -57,11 +29,9 @@ describe('authApi client tests', () => {
     expect(result.state).toBe(mockResponse.state);
   });
 
-  it('performs dev login, stores token and returns mapped AuthUser', async () => {
+  it('performs dev login with credentials: include and returns mapped AuthUser without exposing tokens', async () => {
     const mockAuthResponse = {
-      access_token: 'jwt-access-token-abc',
-      token_type: 'bearer',
-      expires_in: 3600,
+      status: 'success',
       user: {
         id: 'u-123',
         display_name: 'Saurabh Kumar',
@@ -72,20 +42,58 @@ describe('authApi client tests', () => {
       },
     };
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => mockAuthResponse,
-    }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     const user = await devLogin({ email: 'saurabh@example.com', display_name: 'Saurabh Kumar' });
     expect(user.id).toBe('u-123');
     expect(user.displayName).toBe('Saurabh Kumar');
     expect(user.email).toBe('saurabh@example.com');
-    expect(getStoredToken()).toBe('jwt-access-token-abc');
+
+    // Verify credentials: 'include' was used for cookie transport
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/auth/dev-login'),
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
+      }),
+    );
   });
 
-  it('fetches current user with Authorization header', async () => {
-    setStoredToken('jwt-sample-token');
+  it('performs loginWithGoogle with credentials: include and returns mapped AuthUser', async () => {
+    const mockAuthResponse = {
+      status: 'success',
+      user: {
+        id: 'u-456',
+        display_name: 'Emma Watson',
+        email: 'emma@example.com',
+        is_active: true,
+        created_at: '2026-08-17T08:00:00Z',
+        updated_at: '2026-08-17T08:00:00Z',
+      },
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockAuthResponse,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = await loginWithGoogle({ id_token: 'mock-id-token' });
+    expect(user.displayName).toBe('Emma Watson');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/auth/google'),
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('fetches current user via HttpOnly session cookie (/api/auth/me)', async () => {
     const mockUserResponse = {
       id: 'u-123',
       display_name: 'Saurabh Kumar',
@@ -95,20 +103,20 @@ describe('authApi client tests', () => {
       updated_at: '2026-08-17T08:00:00Z',
     };
 
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, options) => {
-      expect(options.headers['Authorization']).toBe('Bearer jwt-sample-token');
+    const fetchMock = vi.fn().mockImplementation((_url, options) => {
+      expect(options.credentials).toBe('include');
       return Promise.resolve({
         ok: true,
         json: async () => mockUserResponse,
       });
-    }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     const user = await fetchCurrentUser();
     expect(user.displayName).toBe('Saurabh Kumar');
   });
 
-  it('fetches account details and maps identities', async () => {
-    setStoredToken('jwt-sample-token');
+  it('fetches account details and maps identities without providerSubject', async () => {
     const mockAccountResponse = {
       user: {
         id: 'u-123',
@@ -122,7 +130,6 @@ describe('authApi client tests', () => {
         {
           id: 'ident-1',
           provider: 'google',
-          provider_subject: 'google-sub-123',
           provider_email: 'saurabh@example.com',
           created_at: '2026-08-17T08:00:00Z',
           last_login_at: '2026-10-03T10:00:00Z',
@@ -140,11 +147,11 @@ describe('authApi client tests', () => {
     expect(details.user.displayName).toBe('Saurabh Kumar');
     expect(details.identities.length).toBe(1);
     expect(details.identities[0].provider).toBe('google');
+    expect((details.identities[0] as any).providerSubject).toBeUndefined();
     expect(details.activeSessionsCount).toBe(2);
   });
 
-  it('updates account profile display name', async () => {
-    setStoredToken('jwt-sample-token');
+  it('updates account profile display name with credentials: include', async () => {
     const mockUpdatedUser = {
       id: 'u-123',
       display_name: 'Updated Name',
@@ -154,27 +161,36 @@ describe('authApi client tests', () => {
       updated_at: '2026-10-03T10:00:00Z',
     };
 
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, options) => {
+    const fetchMock = vi.fn().mockImplementation((_url, options) => {
       expect(options.method).toBe('PATCH');
+      expect(options.credentials).toBe('include');
       expect(JSON.parse(options.body)).toEqual({ display_name: 'Updated Name' });
       return Promise.resolve({
         ok: true,
         json: async () => mockUpdatedUser,
       });
-    }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     const updated = await updateAccountProfile('Updated Name');
     expect(updated.displayName).toBe('Updated Name');
   });
 
-  it('clears stored token upon logout', async () => {
-    setStoredToken('jwt-to-clear');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+  it('calls /api/auth/logout with credentials: include to clear session cookie', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: 'success' }),
-    }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     await logoutUser();
-    expect(getStoredToken()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/auth/logout'),
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
+      }),
+    );
   });
 });
+

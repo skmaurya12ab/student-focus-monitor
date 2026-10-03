@@ -32,7 +32,6 @@ class AuthIdentityResponse(BaseModel):
 
     id: uuid.UUID
     provider: str
-    provider_subject: str
     provider_email: Optional[str] = None
     created_at: datetime
     last_login_at: Optional[datetime] = None

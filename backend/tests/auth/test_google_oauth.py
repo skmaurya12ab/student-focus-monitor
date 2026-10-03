@@ -35,7 +35,7 @@ async def test_google_mock_id_token_verification():
 
 @pytest.mark.asyncio
 async def test_authenticate_google_new_user(db_session):
-    """Verify first-time Google authentication provisions User, UserSettings, and AuthIdentity."""
+    """Verify first-time Google authentication provisions User, UserSettings, AuthIdentity, and sets HttpOnly cookie."""
     app.dependency_overrides[get_async_session] = lambda: db_session
 
     transport = ASGITransport(app=app)
@@ -48,9 +48,9 @@ async def test_authenticate_google_new_user(db_session):
     app.dependency_overrides.clear()
 
     assert response.status_code == 200
+    assert "sfm_session" in response.cookies
     data = response.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
+    assert data["status"] == "success"
     assert data["user"]["email"] == "emma@example.com"
     assert data["user"]["display_name"] == "Student Emma"
 
@@ -88,6 +88,7 @@ async def test_authenticate_google_existing_user(db_session):
             json={"id_token": "mock_google_id_token_david"},
         )
         assert res1.status_code == 200
+        assert "sfm_session" in client.cookies
         user_id_1 = res1.json()["user"]["id"]
 
         # Second login with same provider_subject
@@ -104,6 +105,57 @@ async def test_authenticate_google_existing_user(db_session):
 
 
 @pytest.mark.asyncio
+async def test_no_automatic_email_identity_merge(db_session):
+    """Verify that a different Google subject claiming an already-registered email is rejected (409 Conflict)
+    instead of automatically merging identities or hijacking the existing account."""
+    from unittest.mock import patch
+    import uuid
+
+    app.dependency_overrides[get_async_session] = lambda: db_session
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. First legitimate user authenticates with Google
+        with patch.object(
+            GoogleAuthService,
+            "verify_id_token",
+            return_value={
+                "sub": "google-sub-alice-original",
+                "email": "alice.security@example.com",
+                "name": "Alice Original",
+                "email_verified": True,
+            },
+        ):
+            res1 = await client.post("/api/auth/google", json={"id_token": "token-1"})
+            assert res1.status_code == 200
+            user1_id = res1.json()["user"]["id"]
+
+        # 2. Second authentication attempt with a DIFFERENT provider_subject but the SAME email
+        with patch.object(
+            GoogleAuthService,
+            "verify_id_token",
+            return_value={
+                "sub": "google-sub-attacker-diff",
+                "email": "alice.security@example.com",
+                "name": "Attacker Alice",
+                "email_verified": True,
+            },
+        ):
+            res2 = await client.post("/api/auth/google", json={"id_token": "token-2"})
+            # Must be rejected with 409 Conflict!
+            assert res2.status_code == 409
+            assert "Automatic identity linking by email is disabled" in res2.json()["detail"]
+
+        # 3. Verify in database that Alice's user account has only 1 identity and was NOT linked/hijacked
+        stmt = select(AuthIdentity).where(AuthIdentity.user_id == uuid.UUID(user1_id))
+        identities = (await db_session.execute(stmt)).scalars().all()
+        assert len(identities) == 1
+        assert identities[0].provider_subject == "google-sub-alice-original"
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
 async def test_authenticate_google_missing_credentials(db_session):
     """Verify 400 Bad Request if neither id_token nor code is provided."""
     app.dependency_overrides[get_async_session] = lambda: db_session
@@ -114,3 +166,4 @@ async def test_authenticate_google_missing_credentials(db_session):
         assert response.status_code == 400
 
     app.dependency_overrides.clear()
+

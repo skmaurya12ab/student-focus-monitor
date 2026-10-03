@@ -1,41 +1,19 @@
 /**
- * API client for Google authentication and Account management.
+ * API client for Google authentication and Account management using secure HttpOnly cookie sessions.
  */
 import { API_BASE_URL } from './api';
 import {
   AccountDetails,
-  AuthTokenResponse,
+  AuthSessionResponse,
   AuthUser,
   GoogleAuthUrlResponse,
 } from '../types/auth';
 
-const TOKEN_STORAGE_KEY = 'sfm_access_token';
-
-export function getStoredToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-export function setStoredToken(token: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
-export function clearStoredToken(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(TOKEN_STORAGE_KEY);
-}
-
-function getAuthHeaders(): HeadersInit {
-  const token = getStoredToken();
-  const headers: Record<string, string> = {
+function getRequestHeaders(): HeadersInit {
+  return {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
 }
 
 function mapUserResponse(raw: any): AuthUser {
@@ -67,6 +45,7 @@ export async function getGoogleAuthUrl(): Promise<GoogleAuthUrlResponse> {
 
 /**
  * Authenticate with Google ID token or authorization code.
+ * Backend responds with SessionAuthResponse and sets HttpOnly session cookie.
  */
 export async function loginWithGoogle(payload: {
   id_token?: string;
@@ -75,7 +54,8 @@ export async function loginWithGoogle(payload: {
 }): Promise<AuthUser> {
   const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: getRequestHeaders(),
+    credentials: 'include',
     body: JSON.stringify(payload),
   });
 
@@ -84,13 +64,13 @@ export async function loginWithGoogle(payload: {
     throw new Error(errorData.detail || 'Google authentication failed');
   }
 
-  const data: AuthTokenResponse = await response.json();
-  setStoredToken(data.access_token);
+  const data: AuthSessionResponse = await response.json();
   return mapUserResponse(data.user);
 }
 
 /**
  * Development simulated login for testing without live Google credentials.
+ * Backend responds with SessionAuthResponse and sets HttpOnly session cookie.
  */
 export async function devLogin(payload?: {
   email?: string;
@@ -99,7 +79,8 @@ export async function devLogin(payload?: {
 }): Promise<AuthUser> {
   const response = await fetch(`${API_BASE_URL}/api/auth/dev-login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: getRequestHeaders(),
+    credentials: 'include',
     body: JSON.stringify(payload || {}),
   });
 
@@ -108,24 +89,21 @@ export async function devLogin(payload?: {
     throw new Error(errorData.detail || 'Development login failed');
   }
 
-  const data: AuthTokenResponse = await response.json();
-  setStoredToken(data.access_token);
+  const data: AuthSessionResponse = await response.json();
   return mapUserResponse(data.user);
 }
 
 /**
- * Fetch the currently authenticated user profile (/api/auth/me).
+ * Fetch the currently authenticated user profile (/api/auth/me) via HttpOnly session cookie.
  */
 export async function fetchCurrentUser(): Promise<AuthUser> {
   const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
     method: 'GET',
-    headers: getAuthHeaders(),
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
-      clearStoredToken();
-    }
     throw new Error('Not authenticated');
   }
 
@@ -134,12 +112,13 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
 }
 
 /**
- * Fetch detailed account information including identities and session counts (/api/account).
+ * Fetch detailed account information (/api/account) via HttpOnly session cookie.
  */
 export async function fetchAccountDetails(): Promise<AccountDetails> {
   const response = await fetch(`${API_BASE_URL}/api/account`, {
     method: 'GET',
-    headers: getAuthHeaders(),
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -152,7 +131,6 @@ export async function fetchAccountDetails(): Promise<AccountDetails> {
     identities: (raw.identities || []).map((id: any) => ({
       id: id.id,
       provider: id.provider,
-      providerSubject: id.provider_subject,
       providerEmail: id.provider_email,
       createdAt: id.created_at,
       lastLoginAt: id.last_login_at,
@@ -167,7 +145,8 @@ export async function fetchAccountDetails(): Promise<AccountDetails> {
 export async function updateAccountProfile(displayName: string): Promise<AuthUser> {
   const response = await fetch(`${API_BASE_URL}/api/account`, {
     method: 'PATCH',
-    headers: getAuthHeaders(),
+    headers: getRequestHeaders(),
+    credentials: 'include',
     body: JSON.stringify({ display_name: displayName }),
   });
 
@@ -181,19 +160,17 @@ export async function updateAccountProfile(displayName: string): Promise<AuthUse
 }
 
 /**
- * Terminate the user session and clear credentials.
+ * Terminate the user session and clear HttpOnly cookie on backend.
  */
 export async function logoutUser(): Promise<void> {
-  const token = getStoredToken();
-  if (token) {
-    try {
-      await fetch(`${API_BASE_URL}/api/auth/logout`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-      });
-    } catch {
-      // Best-effort backend notification
-    }
+  try {
+    await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: 'POST',
+      headers: getRequestHeaders(),
+      credentials: 'include',
+    });
+  } catch {
+    // Best-effort backend notification
   }
-  clearStoredToken();
 }
+

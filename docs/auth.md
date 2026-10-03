@@ -1,12 +1,12 @@
 # Authentication & Account Architecture
 
-This document defines the authentication foundation, Google OAuth 2.0 / OpenID Connect integration, session management, and the dedicated Account page established in **Phase 5**.
+This document defines the authentication foundation, Google OAuth 2.0 / OpenID Connect integration, secure HttpOnly-cookie session management, and the dedicated Account page established in **Phase 5**.
 
 ---
 
 ## 1. Authentication Overview
 
-The **Student Focus Monitor** employs **Google OAuth 2.0 / OpenID Connect (OIDC)** as its initial identity provider. Authentication maps external Google identities directly to local users in PostgreSQL while maintaining privacy-first guarantees.
+The **Student Focus Monitor** employs **Google OAuth 2.0 / OpenID Connect (OIDC)** as its primary identity provider. Authentication maps external Google identities directly to local users in PostgreSQL while maintaining privacy-first guarantees.
 
 ```
                    Google
@@ -27,7 +27,7 @@ The **Student Focus Monitor** employs **Google OAuth 2.0 / OpenID Connect (OIDC)
           authenticated user
                 │
                 ▼
-     application session (JWT Bearer)
+     application session (HttpOnly cookie)
                 │
                 ▼
             React frontend
@@ -41,24 +41,34 @@ The **Student Focus Monitor** employs **Google OAuth 2.0 / OpenID Connect (OIDC)
 
 ## 2. Security & Session Model
 
-- **Session Format**: JSON Web Token (JWT) signed using HMAC-SHA256 (`HS256`).
+- **Session Format**: Signed JSON Web Token (JWT) using HMAC-SHA256 (`HS256`).
 - **Token Claims**:
   - `sub`: User UUID string (matching `users.id`).
   - `iat`: Timestamp of issuance.
   - `exp`: Expiration timestamp (default 7 days).
-- **Transport**: Standard `Authorization: Bearer <token>` HTTP header.
-- **Client Storage**: Secure local browser storage (`sfm_access_token`).
+- **Transport**: Secure `HttpOnly` cookie (`sfm_session`) with `SameSite=lax` and `Path=/`.
+- **Client Security**: No tokens or sensitive authentication credentials are stored in `localStorage` or accessible to browser JavaScript, mitigating XSS token-theft risks.
+- **Fallback Support**: `Authorization: Bearer <token>` header is supported as a secondary fallback for programmatic CLI tools or tests.
 
 ---
 
-## 3. Database Integration (Phase 4 Schema)
+## 3. Authoritative External Identity & Merge Prevention
+
+- **Authoritative Identity**: The tuple `(provider, provider_subject)` is the sole authoritative external identifier.
+- **No Automatic Email Linking**: An incoming Google authentication with a new `provider_subject` will **never** automatically link to or merge with an existing user record based on matching email address.
+- **Conflict Handling**: If an authentication attempt provides a new subject ID with an email that is already registered to another user, the backend rejects the request with `409 Conflict` to prevent identity confusion and account takeover.
+- **Privacy Boundary**: `provider_subject` is an internal identifier stored in PostgreSQL but is intentionally omitted from user-facing Account API responses and dashboard displays.
+
+---
+
+## 4. Database Integration (Phase 4 Schema)
 
 Authentication integrates directly with the existing Phase 4 tables:
 
 1. **`users` Table**:
    - `id`: UUID primary key.
    - `display_name`: Student display name (editable).
-   - `email`: User email address.
+   - `email`: User email address (unique index).
    - `is_active`: Boolean active status.
    - `created_at` & `updated_at`: UTC timestamps.
 
@@ -76,28 +86,28 @@ Authentication integrates directly with the existing Phase 4 tables:
 
 ---
 
-## 4. API Endpoints
+## 5. API Endpoints
 
 ### Authentication Routes (`/api/auth`)
 
-| Method | Endpoint | Description | Auth Required |
+| Method | Endpoint | Description | Session Transport |
 |---|---|---|---|
-| `GET` | `/api/auth/google/url` | Generates Google OAuth authorization URL with CSRF state token | No |
-| `POST` | `/api/auth/google` | Verifies Google ID token or code, provisions user, returns JWT | No |
-| `POST` | `/api/auth/dev-login` | Mock authentication for development and automated testing | No |
-| `GET` | `/api/auth/me` | Returns current authenticated user profile | Yes (Bearer) |
-| `POST` | `/api/auth/logout` | Terminates active application session | Yes (Bearer) |
+| `GET` | `/api/auth/google/url` | Generates Google OAuth authorization URL with CSRF state token | None |
+| `POST` | `/api/auth/google` | Verifies Google ID token or code, provisions user, sets session cookie | HttpOnly Cookie |
+| `POST` | `/api/auth/dev-login` | Mock authentication for development and testing, sets session cookie | HttpOnly Cookie |
+| `GET` | `/api/auth/me` | Returns current authenticated user profile | Cookie (or Bearer fallback) |
+| `POST` | `/api/auth/logout` | Terminates active session and clears session cookie | Cookie |
 
 ### Account Routes (`/api/account`)
 
-| Method | Endpoint | Description | Auth Required |
+| Method | Endpoint | Description | Session Transport |
 |---|---|---|---|
-| `GET` | `/api/account` | Retrieves full account details, linked Google identity, and stats | Yes (Bearer) |
-| `PATCH` | `/api/account` | Updates editable profile fields (`display_name`) with validation | Yes (Bearer) |
+| `GET` | `/api/account` | Retrieves full account details and linked Google identities (excluding subject ID) | Cookie |
+| `PATCH` | `/api/account` | Updates editable profile fields (`display_name`) with validation | Cookie |
 
 ---
 
-## 5. Account Page vs. Settings Page
+## 6. Account Page vs. Settings Page
 
 To maintain a clean separation of concerns:
 
@@ -110,6 +120,7 @@ To maintain a clean separation of concerns:
 - **Account Page (`/account`)**:
   - Profile information (avatar, display name, account status)
   - Editable display name with validation and instant feedback
-  - Google Authentication connection status, subject ID, and linked email
-  - Session security details and active monitoring count
+  - Google Authentication connection status, verified email, and last login time
+  - Session security details (Secure HttpOnly cookie session) and active monitoring count
   - Account Sign Out action
+

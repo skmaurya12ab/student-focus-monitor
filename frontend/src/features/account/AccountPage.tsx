@@ -71,7 +71,6 @@ export const AccountPage: React.FC = () => {
   const avatarInitial = user?.displayName ? user.displayName.charAt(0).toUpperCase() : 'S';
   const emailDisplay = user?.email || 'saurabh@example.com';
   const googleIdentity = accountDetails?.identities.find((id) => id.provider === 'google');
-  const googleSub = googleIdentity?.providerSubject || 'google-auth-link-active';
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString('en-US', {
         month: 'short',
@@ -221,11 +220,6 @@ export const AccountPage: React.FC = () => {
               </div>
 
               <div className="sfm-identity-item">
-                <span className="sfm-identity-label">Provider Subject ID</span>
-                <span className="sfm-identity-value sfm-code-text">{googleSub}</span>
-              </div>
-
-              <div className="sfm-identity-item">
                 <span className="sfm-identity-label">Last Identity Verification</span>
                 <span className="sfm-identity-value">{lastLogin}</span>
               </div>
@@ -249,13 +243,8 @@ export const AccountPage: React.FC = () => {
 
             <div className="sfm-identity-list">
               <div className="sfm-identity-item">
-                <span className="sfm-identity-label">Session Token Format</span>
-                <span className="sfm-identity-value">JWT Bearer (HS256)</span>
-              </div>
-
-              <div className="sfm-identity-item">
-                <span className="sfm-identity-label">Credential Storage</span>
-                <span className="sfm-identity-value">Local Browser Session</span>
+                <span className="sfm-identity-label">Session Protection</span>
+                <span className="sfm-identity-value">Secure HttpOnly Cookie</span>
               </div>
 
               <div className="sfm-identity-item">

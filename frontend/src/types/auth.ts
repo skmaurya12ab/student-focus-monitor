@@ -14,7 +14,6 @@ export interface AuthUser {
 export interface AuthIdentity {
   id: string;
   provider: string;
-  providerSubject: string;
   providerEmail: string | null;
   createdAt: string;
   lastLoginAt: string | null;
@@ -26,10 +25,8 @@ export interface AccountDetails {
   activeSessionsCount: number;
 }
 
-export interface AuthTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
+export interface AuthSessionResponse {
+  status: string;
   user: {
     id: string;
     display_name: string;

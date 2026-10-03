@@ -35,3 +35,11 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserResponse
+
+
+class SessionAuthResponse(BaseModel):
+    """Authenticated session response when session is managed via HttpOnly cookie."""
+
+    status: str = "success"
+    user: UserResponse
+
