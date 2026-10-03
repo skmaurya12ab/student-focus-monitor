@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     CheckConstraint,
     Index,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -41,7 +42,14 @@ class StudySession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         ),
         CheckConstraint("ended_at IS NULL OR ended_at >= started_at", name="ck_study_sessions_time_consistency"),
         Index("ix_study_sessions_user_started", "user_id", "started_at"),
+        Index(
+            "uq_study_sessions_user_active",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
     )
+
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

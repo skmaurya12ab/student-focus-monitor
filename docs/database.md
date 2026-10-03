@@ -217,11 +217,12 @@ Stores finalized or in-progress study sessions.
   - `ck_study_sessions_focus_score_range`: `focus_score IS NULL OR (focus_score >= 0 AND focus_score <= 100)`
   - `ck_study_sessions_time_consistency`: `ended_at IS NULL OR ended_at >= started_at`
   - Duration non-negative checks for `total_duration_seconds`, `focused_seconds`, `distracted_seconds`, and `away_seconds`.
-- **Indexes**:
+- **Indexes & Unique Constraints**:
   - `ix_study_sessions_user_id` on (`user_id`)
   - `ix_study_sessions_started_at` on (`started_at`)
   - `ix_study_sessions_status` on (`status`)
   - `ix_study_sessions_user_started` composite index on (`user_id`, `started_at` DESC) for fast student history queries
+  - `uq_study_sessions_user_active` **UNIQUE partial index** on (`user_id`) `WHERE status = 'active'` (enforces the invariant that a user can have at most one active study session at any time, even under concurrent requests). Added in Phase 6 migration `621aa6c6d813`.
 
 ### 3.5. `detection_events`
 Stores discrete distraction alert occurrences during a session.

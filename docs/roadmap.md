@@ -28,8 +28,8 @@ The project consists of **15 total phases** (Phase 0 through Phase 14):
 - **Phase 5 — Google authentication**
   - Integrate Google OAuth 2.0 / OpenID Connect authentication on frontend and backend for secure session management.
 
-- **Phase 6 — Study session lifecycle**
-  - Implement session creation, start, pause, resume, finish, and summary API endpoints and state machines.
+- **Phase 6 — Study session lifecycle (Completed)**
+  - Implement authenticated session creation, active-session lookup, get session by ID, and stop endpoints with authoritative server-generated UUIDs, timestamps, and duration calculation. Enforce single active session invariant via partial unique database index and service logic. Integrated with Figma frontend without camera/ML dependencies.
 
 - **Phase 7 — Camera and realtime transport**
   - Implement client-side camera capture and high-throughput, low-latency transport (WebSockets / WebRTC) between frontend and backend.

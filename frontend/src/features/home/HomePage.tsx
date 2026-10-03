@@ -10,25 +10,101 @@ import {
   LightningIcon,
   ClockTimeIcon,
 } from '../../components/common/Icons';
+import { useSession } from '../../context/SessionContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface HomePageProps {
   data: HomeDashboardData;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ data }) => {
-  const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
+  const {
+    activeSession,
+    isStarting,
+    isStopping,
+    sessionError,
+    elapsedSeconds,
+    isBackendUnavailable,
+    startSession,
+    stopSession,
+    clearSessionError,
+    refreshActiveSession,
+  } = useSession();
+  const { isAuthenticated, user } = useAuth();
+  const [authNotice, setAuthNotice] = useState<boolean>(false);
 
-  const toggleSession = () => {
-    setIsSessionActive((prev) => !prev);
+  const formatTimer = (totalSeconds: number): string => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
+
+  const handleStudySessionClick = async () => {
+    if (!isAuthenticated) {
+      setAuthNotice(true);
+      return;
+    }
+    setAuthNotice(false);
+
+    try {
+      if (activeSession) {
+        await stopSession();
+      } else {
+        await startSession();
+      }
+    } catch {
+      // Error is stored in SessionContext.sessionError
+    }
+  };
+
+  const avatarInitial = user?.displayName ? user.displayName.charAt(0).toUpperCase() : 'N';
+  const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Saurabh';
 
   return (
     <div className="sfm-page sfm-home-page" id="home-dashboard-page">
+      {/* Backend Unavailable Banner */}
+      {isBackendUnavailable && (
+        <div className="sfm-account-banner sfm-account-banner-offline" role="alert">
+          <span>
+            ⚠️ <strong>Backend Offline:</strong> Cannot reach backend service at <code>http://localhost:8000</code>. Study session lifecycle actions are temporarily unavailable.
+          </span>
+          <button type="button" className="sfm-btn-retry" onClick={refreshActiveSession}>
+            Retry Connection
+          </button>
+        </div>
+      )}
+
+      {/* Auth Notice Banner */}
+      {authNotice && !isAuthenticated && (
+        <div className="sfm-account-banner sfm-account-banner-offline" role="alert">
+          <span>
+            🔒 <strong>Authentication Required:</strong> Please sign in with your student account to start persistent study sessions.
+          </span>
+          <button type="button" className="sfm-btn-retry" onClick={() => setAuthNotice(false)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Session Error Banner */}
+      {sessionError && (
+        <div className="sfm-account-banner sfm-account-banner-offline" role="alert">
+          <span>⚠️ {sessionError}</span>
+          <button type="button" className="sfm-btn-retry" onClick={clearSessionError}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
       <header className="sfm-page-header">
         <div className="sfm-header-left">
           <div className="sfm-avatar-circle" aria-label="User Avatar">
-            <span>N</span>
+            <span>{avatarInitial}</span>
           </div>
           <div className="sfm-header-titles">
             <h1 className="sfm-page-title">{data.greetingTitle}</h1>
@@ -44,18 +120,27 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
             </div>
             <div className="sfm-speech-bubble">
               <span>Need a boost,</span>
-              <span>Saurabh?</span>
+              <span>{firstName}?</span>
             </div>
           </div>
 
           {/* Primary Action Button */}
           <button
             type="button"
-            className="sfm-btn-primary"
-            onClick={toggleSession}
+            className={`sfm-btn-primary ${activeSession ? 'is-active-session' : ''}`}
+            onClick={handleStudySessionClick}
+            disabled={isStarting || isStopping || isBackendUnavailable}
             id="btn-start-study-session"
           >
-            <span>{isSessionActive ? 'End Study Session' : 'Start Study Session'}</span>
+            <span>
+              {isStarting
+                ? 'Starting...'
+                : isStopping
+                ? 'Ending...'
+                : activeSession
+                ? 'End Study Session'
+                : 'Start Study Session'}
+            </span>
             <span className="sfm-shortcut-pill">S</span>
           </button>
 
@@ -70,6 +155,42 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
           </button>
         </div>
       </header>
+
+      {/* Active Study Session Lifecycle Card */}
+      {activeSession && (
+        <div className="sfm-card sfm-card-full sfm-session-lifecycle-card" id="active-study-session-card">
+          <div className="sfm-lifecycle-left">
+            <span className="sfm-lifecycle-pulse-dot" />
+            <div className="sfm-lifecycle-info">
+              <div className="sfm-lifecycle-title-row">
+                <span className="sfm-lifecycle-title">Active Study Session</span>
+                <span className="sfm-session-id-pill" id="active-session-id-pill" title={`Session ID: ${activeSession.id}`}>
+                  #{activeSession.id.slice(0, 8)}
+                </span>
+                <span className="sfm-lifecycle-status-badge" id="active-session-status-badge">active</span>
+              </div>
+              <p className="sfm-lifecycle-meta">
+                Started at {new Date(activeSession.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Container for upcoming live monitoring
+              </p>
+            </div>
+          </div>
+          <div className="sfm-lifecycle-right">
+            <div className="sfm-lifecycle-timer-box">
+              <span className="sfm-lifecycle-timer-label">SESSION TIME</span>
+              <span className="sfm-lifecycle-timer-val" id="active-session-elapsed-timer">{formatTimer(elapsedSeconds)}</span>
+            </div>
+            <button
+              type="button"
+              className="sfm-btn-lifecycle-stop"
+              id="btn-stop-session-card"
+              onClick={handleStudySessionClick}
+              disabled={isStopping}
+            >
+              {isStopping ? 'Ending...' : 'End Session'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid Content */}
       <div className="sfm-content-grid">
@@ -98,13 +219,14 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
             <button
               type="button"
               className="sfm-btn-live-session"
-              onClick={toggleSession}
               id="btn-start-live-session"
+              title="Camera and realtime transport will be enabled in Phase 7"
             >
               <PlayIcon size={12} color="#FFFFFF" />
-              <span>{isSessionActive ? 'Stop Live Session' : 'Start Live Session'}</span>
+              <span>Start Live Session</span>
             </button>
           </div>
+
 
           {/* Right Live Stats */}
           <div className="sfm-live-stats-list">

@@ -29,6 +29,7 @@ def alembic_config():
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     ini_path = os.path.join(base_dir, "alembic.ini")
     cfg = Config(ini_path)
+    cfg.set_main_option("script_location", os.path.join(base_dir, "alembic"))
     cfg.set_main_option("sqlalchemy.url", MIGRATION_TEST_DB_URL)
     # Also set env var for alembic env.py
     os.environ["DATABASE_URL"] = MIGRATION_TEST_DB_URL

@@ -1,0 +1,186 @@
+# API Reference Documentation
+
+This document describes the REST API endpoints implemented for the Student Focus Monitor, focusing on **Phase 5 (Authentication & Account)** and **Phase 6 (Study Session Lifecycle)**.
+
+---
+
+## 1. Authentication & Cookie Architecture
+
+All protected endpoints require an authenticated user session established via the HttpOnly cookie `sfm_session`.
+
+- **Transport**: HttpOnly, SameSite=Lax, Secure (in production).
+- **Frontend Clients**: Must make requests with `credentials: "include"`.
+- **Identity Source**: Current user identity is authoritatively determined server-side from `sfm_session` (or `Authorization: Bearer <token>` for external CLI tools). The client **never** supplies `user_id` as the authority.
+
+---
+
+## 2. Study Session Lifecycle Endpoints (Phase 6)
+
+The canonical entity is `study_sessions`. A study session is the root parent container for all subsequent telemetry, detection events, and feedback (introduced in later phases).
+
+### 2.1. Start Study Session
+
+Creates a new active study session for the authenticated user.
+
+- **Method / Path**: `POST /api/sessions`
+- **Authentication**: Required (`sfm_session` cookie)
+- **Request Body** (optional):
+  ```json
+  {
+    "detector_version": "2.0.0",
+    "feature_schema_version": "1.0.0"
+  }
+  ```
+- **Lifecycle Semantics**:
+  1. Authenticates current user.
+  2. Verifies user has NO currently active session.
+  3. Generates UUID server-side (`id`).
+  4. Generates UTC timestamp server-side (`started_at`).
+  5. Sets `status = "active"`.
+  6. Detection-derived metrics (`focused_seconds`, `distracted_seconds`, `away_seconds`, `focus_score`) remain `null`.
+- **Response**: `201 Created`
+  ```json
+  {
+    "id": "1ddb9c9e-...",
+    "user_id": "81190744-...",
+    "status": "active",
+    "started_at": "2026-10-03T14:05:32.787495Z",
+    "ended_at": null,
+    "total_duration_seconds": null,
+    "focused_seconds": null,
+    "distracted_seconds": null,
+    "away_seconds": null,
+    "focus_score": null,
+    "detector_version": "2.0.0",
+    "feature_schema_version": "1.0.0",
+    "created_at": "2026-10-03T14:05:32.787495Z",
+    "updated_at": "2026-10-03T14:05:32.787495Z"
+  }
+  ```
+- **Error Codes**:
+  - `401 Unauthorized`: Not authenticated.
+  - `409 Conflict`: User already has an active study session (`"Active study session already exists"`).
+
+---
+
+### 2.2. Get Active Study Session
+
+Retrieves the authenticated user's currently active study session (if any). Enables state recovery after page refresh.
+
+- **Method / Path**: `GET /api/sessions/active`
+- **Authentication**: Required (`sfm_session` cookie)
+- **Response**: `200 OK`
+  - If active session exists:
+    ```json
+    {
+      "session": {
+        "id": "1ddb9c9e-...",
+        "user_id": "81190744-...",
+        "status": "active",
+        "started_at": "2026-10-03T14:05:32.787495Z",
+        "ended_at": null,
+        "total_duration_seconds": null,
+        "focus_score": null,
+        ...
+      }
+    }
+    ```
+  - If no active session exists:
+    ```json
+    {
+      "session": null
+    }
+    ```
+- **Error Codes**:
+  - `401 Unauthorized`: Not authenticated.
+
+---
+
+### 2.3. Get Study Session by ID
+
+Retrieves a specific study session by ID, strictly enforcing ownership.
+
+- **Method / Path**: `GET /api/sessions/{session_id}`
+- **Authentication**: Required (`sfm_session` cookie)
+- **Authorization**: The authenticated user must own the session (`session.user_id == current_user.id`).
+- **Response**: `200 OK`
+  ```json
+  {
+    "id": "1ddb9c9e-...",
+    "user_id": "81190744-...",
+    "status": "active",
+    "started_at": "2026-10-03T14:05:32.787495Z",
+    "ended_at": null,
+    "total_duration_seconds": null,
+    "focus_score": null,
+    ...
+  }
+  ```
+- **Error Codes**:
+  - `401 Unauthorized`: Not authenticated.
+  - `404 Not Found`: Session does not exist OR belongs to another user (prevents IDOR user enumeration).
+
+---
+
+### 2.4. Stop Study Session
+
+Transitions an active study session to `completed` and computes authoritative duration.
+
+- **Method / Path**: `POST /api/sessions/{session_id}/stop`
+- **Authentication**: Required (`sfm_session` cookie)
+- **Authorization**: The authenticated user must own the session.
+- **Lifecycle Semantics**:
+  1. Authenticates current user and looks up session.
+  2. Verifies ownership (`404 Not Found` if session belongs to another user).
+  3. Verifies session is currently in `active` status.
+  4. Generates UTC timestamp server-side (`ended_at`).
+  5. Computes authoritative duration:
+     $$\text{total\_duration\_seconds} = \max(0.0, (\text{ended\_at} - \text{started\_at}).\text{total\_seconds}())$$
+  6. Sets `status = "completed"`.
+  7. Persists updates to PostgreSQL.
+- **Response**: `200 OK`
+  ```json
+  {
+    "message": "Study session completed successfully",
+    "session": {
+      "id": "1ddb9c9e-...",
+      "user_id": "81190744-...",
+      "status": "completed",
+      "started_at": "2026-10-03T14:05:32.787495Z",
+      "ended_at": "2026-10-03T14:07:35.741082Z",
+      "total_duration_seconds": 122.95,
+      "focused_seconds": null,
+      "distracted_seconds": null,
+      "away_seconds": null,
+      "focus_score": null,
+      "detector_version": "2.0.0",
+      "feature_schema_version": "1.0.0",
+      "created_at": "2026-10-03T14:05:32.787495Z",
+      "updated_at": "2026-10-03T14:07:35.741082Z"
+    }
+  }
+  ```
+- **Error Codes**:
+  - `401 Unauthorized`: Not authenticated.
+  - `404 Not Found`: Session does not exist or belongs to another user.
+  - `409 Conflict`: Session is not active (e.g., already completed or cancelled).
+
+---
+
+## 3. Concurrency & Invariant Enforcement
+
+- **Invariant**: A user may have at most **one** active study session at any time.
+- **Enforcement Layers**:
+  1. **Application Service**: `SessionService.create_session` queries for an existing active session before inserting.
+  2. **Database Partial Unique Index**: `CREATE UNIQUE INDEX uq_study_sessions_user_active ON study_sessions (user_id) WHERE status = 'active';`
+  3. If two concurrent requests arrive simultaneously, PostgreSQL's index guarantees one commits and the second fails with a unique constraint violation, cleanly mapped to HTTP 409 Conflict.
+
+---
+
+## 4. Future Compatibility (Phase 7+)
+
+Phase 6 establishes the authoritative session container (`id`). In subsequent phases:
+- **Phase 7 (Camera + WebSocket)**: The WebSocket connection will authenticate the user and bind to this `session_id`.
+- **Phase 8 (Detection)**: Detection events will reference `detection_events.session_id`.
+- **Phase 11 (Telemetry)**: Telemetry samples will reference `telemetry_samples.session_id`.
+- No fake detection metrics (`focus_score`, `focused_seconds`) are fabricated in Phase 6.

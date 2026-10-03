@@ -129,19 +129,26 @@ The development screen will automatically query `GET http://localhost:8000/api/h
 
 ## 6. Testing & Build Commands
 
-### Backend Tests
+### Backend Tests & Database Migrations
 
-From the `backend/` directory:
+Apply database migrations:
 
 ```bash
 cd backend
-pytest
+alembic upgrade head
 ```
 
-Or run pytest with verbose output:
+Run all backend tests:
 
 ```bash
+cd backend
 pytest -v
+```
+
+Run specific session lifecycle tests:
+
+```bash
+pytest tests/session/ -v
 ```
 
 ### Frontend Tests
