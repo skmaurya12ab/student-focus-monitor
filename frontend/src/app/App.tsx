@@ -4,6 +4,7 @@ import { checkBackendHealth } from '../services/api';
 import { BackendStatus } from '../types/api';
 import { AuthProvider } from '../context/AuthContext';
 import { SessionProvider } from '../context/SessionContext';
+import { LiveTransportProvider } from '../context/LiveTransportContext';
 
 export const App: React.FC = () => {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
@@ -25,9 +26,11 @@ export const App: React.FC = () => {
   return (
     <AuthProvider>
       <SessionProvider>
-        <div className="sfm-app-root" data-backend-status={backendStatus}>
-          <AppShell />
-        </div>
+        <LiveTransportProvider>
+          <div className="sfm-app-root" data-backend-status={backendStatus}>
+            <AppShell />
+          </div>
+        </LiveTransportProvider>
       </SessionProvider>
     </AuthProvider>
   );

@@ -177,10 +177,43 @@ Transitions an active study session to `completed` and computes authoritative du
 
 ---
 
-## 4. Future Compatibility (Phase 7+)
+---
 
-Phase 6 establishes the authoritative session container (`id`). In subsequent phases:
-- **Phase 7 (Camera + WebSocket)**: The WebSocket connection will authenticate the user and bind to this `session_id`.
-- **Phase 8 (Detection)**: Detection events will reference `detection_events.session_id`.
+## 4. Live Transport WebSocket Endpoint (Phase 7)
+
+For full protocol specification, refer to [docs/websocket.md](websocket.md).
+
+### 4.1. Live Camera Transport WebSocket
+
+Establishes an ephemeral, bidirectional live transport channel for streaming camera preview frames.
+
+- **Protocol / Path**: `WS /api/ws/sessions/{session_id}`
+- **Authentication**: Required (`sfm_session` HttpOnly cookie or `Authorization: Bearer` header)
+- **Origin Validation**: Required (`Origin` header must match configured trusted origins; wildcards rejected)
+- **Authorization**:
+  - The session identified by `{session_id}` must exist.
+  - The session must belong to the authenticated user (`session.user_id == current_user.id`).
+  - The session must be in `status = "active"`.
+- **Concurrency Policy**:
+  - At most **one** active live connection is permitted per active study session.
+  - Concurrent connection attempts are rejected with code `1008`.
+- **Payload Limits**:
+  - Binary frames: Max 1,048,576 bytes (1 MB).
+  - Rate limit: Max 15 FPS.
+- **Privacy Guarantee**:
+  - Zero media persistence: frames are ephemeral and discarded after transport handling.
+- **Close Codes**:
+  - `1000`: Normal closure (user stopped live session or study session completed).
+  - `1008`: Policy violation (unauthenticated, untrusted origin, wrong user, session not active, or duplicate connection).
+
+---
+
+## 5. Future Compatibility (Phase 8+)
+
+Phase 6 established the authoritative session container (`id`), and Phase 7 established live transport. In subsequent phases:
+- **Phase 8 (Detection)**: Real MediaPipe detector integration into the live stream using the established `detector_hook` seam.
+- **Phase 9 (Live Dashboard)**: Real-time detection metrics and alerts surfaced in the dashboard.
+- **Phase 10 (Session History)**: Historical session analytics and timeline aggregation.
 - **Phase 11 (Telemetry)**: Telemetry samples will reference `telemetry_samples.session_id`.
-- No fake detection metrics (`focus_score`, `focused_seconds`) are fabricated in Phase 6.
+- No fake detection metrics (`focus_score`, `focused_seconds`) or ML logic are fabricated in Phase 7.
+

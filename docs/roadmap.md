@@ -31,8 +31,8 @@ The project consists of **15 total phases** (Phase 0 through Phase 14):
 - **Phase 6 — Study session lifecycle (Completed)**
   - Implement authenticated session creation, active-session lookup, get session by ID, and stop endpoints with authoritative server-generated UUIDs, timestamps, and duration calculation. Enforce single active session invariant via partial unique database index and service logic. Integrated with Figma frontend without camera/ML dependencies.
 
-- **Phase 7 — Camera and realtime transport**
-  - Implement client-side camera capture and high-throughput, low-latency transport (WebSockets / WebRTC) between frontend and backend.
+- **Phase 7 — Camera and realtime transport (Completed)**
+  - Implement client-side camera capture (video only, audio strictly excluded), canvas downsampling, bounded pacing (~5 FPS), backpressure protection, and authenticated WebSocket transport (`/api/ws/sessions/{session_id}`). Backend enforces Origin validation, session ownership, active status requirement, single live connection invariant, max frame size limits (1 MB), and frame discarding without media persistence. Defines clean seam for Phase 8 detector.
 
 - **Phase 8 — Real monitoring**
   - Connect live video frames with the modular detection engine in real-time to compute attention scores and trigger alerts.

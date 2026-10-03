@@ -136,4 +136,13 @@ class SessionService:
 
         await db.commit()
         await db.refresh(session)
+
+        # 5. Proactively close any active live transport connection for this session
+        from app.services.live_transport_service import live_transport_manager
+        await live_transport_manager.close_session_transport(
+            session.id,
+            code=1000,
+            reason="Study session ended",
+        )
+
         return session

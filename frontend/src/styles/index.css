@@ -488,6 +488,20 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.sfm-camera-video-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
+}
+
+.sfm-camera-video-preview.is-hidden {
+  display: none;
 }
 
 .sfm-frame-inner {
@@ -530,7 +544,47 @@ html, body {
   gap: 10px;
   width: fit-content;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: all 0.15s ease;
+}
+
+.sfm-btn-live-session:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sfm-btn-live-session.is-live-active {
+  background-color: #DC2626;
+  color: #FFFFFF;
+}
+
+.sfm-btn-live-session.is-live-active:hover {
+  background-color: #B91C1C;
+}
+
+.sfm-stop-icon-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.sfm-live-indicator.is-connected .sfm-live-dot {
+  color: #10B981;
+}
+
+.sfm-live-indicator.is-connecting .sfm-live-dot,
+.sfm-live-indicator.is-starting_camera .sfm-live-dot {
+  color: #F59E0B;
+}
+
+.sfm-live-indicator.is-idle .sfm-live-dot,
+.sfm-live-indicator.is-disconnected .sfm-live-dot {
+  color: #9CA3AF;
+}
+
+.sfm-live-dot.is-pulsing {
+  animation: pulse-dot 1.5s infinite;
 }
 
 .sfm-btn-live-session:hover {

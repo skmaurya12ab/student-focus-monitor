@@ -12,6 +12,7 @@ import {
 } from '../../components/common/Icons';
 import { useSession } from '../../context/SessionContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLiveTransport } from '../../context/LiveTransportContext';
 
 interface HomePageProps {
   data: HomeDashboardData;
@@ -31,7 +32,17 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
     refreshActiveSession,
   } = useSession();
   const { isAuthenticated, user } = useAuth();
+  const {
+    state: liveState,
+    videoRef,
+    isLive,
+    startLiveSession,
+    stopLiveSession,
+    error: liveError,
+    clearError: clearLiveError,
+  } = useLiveTransport();
   const [authNotice, setAuthNotice] = useState<boolean>(false);
+  const [liveNotice, setLiveNotice] = useState<string | null>(null);
 
   const formatTimer = (totalSeconds: number): string => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -61,6 +72,20 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
     }
   };
 
+  const handleLiveSessionClick = async () => {
+    if (!activeSession) {
+      setLiveNotice('Please start a Study Session first before beginning live camera monitoring.');
+      return;
+    }
+    setLiveNotice(null);
+
+    if (isLive || liveState === 'connected') {
+      stopLiveSession();
+    } else {
+      await startLiveSession();
+    }
+  };
+
   const avatarInitial = user?.displayName ? user.displayName.charAt(0).toUpperCase() : 'N';
   const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Saurabh';
 
@@ -85,6 +110,30 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
             🔒 <strong>Authentication Required:</strong> Please sign in with your student account to start persistent study sessions.
           </span>
           <button type="button" className="sfm-btn-retry" onClick={() => setAuthNotice(false)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Live Notice Banner (e.g. Study Session required first) */}
+      {liveNotice && (
+        <div className="sfm-account-banner sfm-account-banner-offline" role="alert" id="live-session-notice-banner">
+          <span>
+            ⚠️ <strong>Live Monitoring Notice:</strong> {liveNotice}
+          </span>
+          <button type="button" className="sfm-btn-retry" onClick={() => setLiveNotice(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Live Error Banner */}
+      {liveError && (
+        <div className="sfm-account-banner sfm-account-banner-offline" role="alert" id="live-session-error-banner">
+          <span>
+            📷 <strong>Camera / Transport Notice:</strong> {liveError}
+          </span>
+          <button type="button" className="sfm-btn-retry" onClick={clearLiveError}>
             Dismiss
           </button>
         </div>
@@ -201,12 +250,30 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
         >
           {/* Left Preview Box */}
           <div className="sfm-video-preview-box">
-            <div className="sfm-live-indicator">
-              <span className="sfm-live-dot">●</span>
-              <span className="sfm-live-text">{data.liveStatus}</span>
+            <div className={`sfm-live-indicator is-${liveState}`} id="live-transport-indicator">
+              <span className={`sfm-live-dot ${isLive ? 'is-pulsing' : ''}`}>●</span>
+              <span className="sfm-live-text" id="live-transport-status-text">
+                {isLive
+                  ? 'LIVE'
+                  : liveState === 'connecting'
+                  ? 'CONNECTING'
+                  : liveState === 'starting_camera'
+                  ? 'STARTING'
+                  : 'STANDBY'}
+              </span>
             </div>
-            <div className="sfm-mock-camera-frame">
-              <div className="sfm-frame-inner"></div>
+            <div className="sfm-mock-camera-frame" id="live-camera-preview-container">
+              <video
+                ref={videoRef}
+                id="live-camera-video-preview"
+                autoPlay
+                playsInline
+                muted
+                className={`sfm-camera-video-preview ${isLive || liveState === 'camera_ready' ? 'is-visible' : 'is-hidden'}`}
+              />
+              {!(isLive || liveState === 'camera_ready') && (
+                <div className="sfm-frame-inner"></div>
+              )}
             </div>
           </div>
 
@@ -218,12 +285,28 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
             <p className="sfm-card-subheading">Real-time focus detection</p>
             <button
               type="button"
-              className="sfm-btn-live-session"
+              className={`sfm-btn-live-session ${isLive ? 'is-live-active' : ''}`}
               id="btn-start-live-session"
-              title="Camera and realtime transport will be enabled in Phase 7"
+              onClick={handleLiveSessionClick}
+              disabled={liveState === 'starting_camera' || liveState === 'connecting' || liveState === 'stopping'}
+              title={isLive ? 'Stop Live Camera Transport' : 'Start Live Camera Transport'}
             >
-              <PlayIcon size={12} color="#FFFFFF" />
-              <span>Start Live Session</span>
+              {isLive ? (
+                <span className="sfm-stop-icon-box">■</span>
+              ) : (
+                <PlayIcon size={12} color="#FFFFFF" />
+              )}
+              <span>
+                {liveState === 'starting_camera'
+                  ? 'Starting Camera...'
+                  : liveState === 'connecting'
+                  ? 'Connecting...'
+                  : liveState === 'stopping'
+                  ? 'Stopping...'
+                  : isLive
+                  ? 'Stop Live Session'
+                  : 'Start Live Session'}
+              </span>
             </button>
           </div>
 

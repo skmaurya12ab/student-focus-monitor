@@ -151,6 +151,12 @@ Run specific session lifecycle tests:
 pytest tests/session/ -v
 ```
 
+Run specific live transport WebSocket tests:
+
+```bash
+pytest tests/websocket/ -v
+```
+
 ### Frontend Tests
 
 From the `frontend/` directory:
