@@ -55,7 +55,7 @@ postgres_data/
 *.sqlite3
 *.db
 backend/data/
-data/
+/data/
 *.task
 
 # IDE & OS files

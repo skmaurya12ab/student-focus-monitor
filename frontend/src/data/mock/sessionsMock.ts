@@ -1,0 +1,66 @@
+import { SessionsHistoryData } from '../../types/dashboard';
+
+export const mockSessionsData: SessionsHistoryData = {
+  title: 'Sessions History',
+  subtitle: 'Review every study session and see what broke your focus.',
+  searchPlaceholder: 'Search sessions',
+  dateFilterLabel: 'Date ▾',
+  sessions: [
+    {
+      id: 'session-2026-08-23',
+      date: 'Aug 23, 2026',
+      duration: '3h 24m',
+      focus: '78%',
+      distractions: 9,
+      status: 'Completed',
+    },
+    {
+      id: 'session-2026-08-22',
+      date: 'Aug 22, 2026',
+      duration: '2h 48m',
+      focus: '84%',
+      distractions: 5,
+      status: 'Completed',
+    },
+    {
+      id: 'session-2026-08-21',
+      date: 'Aug 21, 2026',
+      duration: '4h 02m',
+      focus: '71%',
+      distractions: 14,
+      status: 'Completed',
+    },
+    {
+      id: 'session-2026-08-20',
+      date: 'Aug 20, 2026',
+      duration: '2h 16m',
+      focus: '89%',
+      distractions: 3,
+      status: 'Completed',
+    },
+    {
+      id: 'session-2026-08-19',
+      date: 'Aug 19, 2026',
+      duration: '3h 31m',
+      focus: '76%',
+      distractions: 8,
+      status: 'Completed',
+    },
+  ],
+  selectedSession: {
+    title: 'Selected Session · Aug 23, 2026',
+    summary: '3h 24m · 78% focus · 9 distractions',
+    topCauses: 'Top causes: Phone use · Yawning · Away',
+    startTime: '10:00 AM',
+    endTime: '1:24 PM',
+    segments: [
+      { id: 's-seg-1', state: 'focused', startMinutes: 0, durationMinutes: 35 },
+      { id: 's-seg-2', state: 'distracted', startMinutes: 38, durationMinutes: 8 },
+      { id: 's-seg-3', state: 'focused', startMinutes: 48, durationMinutes: 42 },
+      { id: 's-seg-4', state: 'distracted', startMinutes: 92, durationMinutes: 12 },
+      { id: 's-seg-5', state: 'focused', startMinutes: 106, durationMinutes: 45 },
+      { id: 's-seg-6', state: 'distracted', startMinutes: 153, durationMinutes: 6 },
+      { id: 's-seg-7', state: 'focused', startMinutes: 161, durationMinutes: 43 },
+    ],
+  },
+};
