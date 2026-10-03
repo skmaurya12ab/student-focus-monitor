@@ -1,0 +1,1 @@
+"""Detection test suite package."""
