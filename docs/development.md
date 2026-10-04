@@ -169,6 +169,13 @@ Run Phase 9 live dashboard integration tests:
 pytest tests/detection/test_phase9_live_dashboard_integration.py -v
 ```
 
+Run Phase 10 session history and focus analytics tests:
+
+```bash
+pytest tests/session/test_session_history_api.py -v
+pytest tests/session/test_analytics_api.py -v
+```
+
 ### Frontend Tests
 
 From the `frontend/` directory:

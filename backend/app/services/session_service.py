@@ -11,10 +11,147 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import utc_now
 from app.db.models.study_session import StudySession
 from app.db.models.user import User
+from app.schemas.session import (
+    DetectionEventResponse,
+    SessionCategorySummary,
+    StudySessionDetailResponse,
+    StudySessionResponse,
+)
 
 
 class SessionService:
     """Service handling authoritative study session lifecycle state transitions."""
+
+    @staticmethod
+    async def get_session_history(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        page: int = 1,
+        page_size: int = 10,
+        status: Optional[str] = None,
+    ) -> tuple[list[StudySessionResponse], int]:
+        """Retrieve paginated study sessions for the authenticated user, newest first.
+        
+        Uses SQL aggregation to join distraction event counts in a single query (zero N+1).
+        """
+        from app.db.models.detection_event import DetectionEvent
+        from sqlalchemy import func
+
+        page = max(1, page)
+        page_size = max(1, min(page_size, 50))
+
+        # Base filter condition
+        base_filter = [StudySession.user_id == user_id]
+        if status:
+            base_filter.append(StudySession.status == status)
+
+        # 1. Total count query
+        count_stmt = select(func.count(StudySession.id)).where(*base_filter)
+        count_res = await db.execute(count_stmt)
+        total_count = int(count_res.scalar() or 0)
+
+        if total_count == 0:
+            return [], 0
+
+        # 2. Paginated items query with aggregated distraction counts
+        distraction_subq = (
+            select(
+                DetectionEvent.session_id,
+                func.count(DetectionEvent.id).label("distraction_count"),
+            )
+            .group_by(DetectionEvent.session_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                StudySession,
+                func.coalesce(distraction_subq.c.distraction_count, 0).label("distraction_count"),
+            )
+            .outerjoin(distraction_subq, StudySession.id == distraction_subq.c.session_id)
+            .where(*base_filter)
+            .order_by(StudySession.started_at.desc(), StudySession.id.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+
+        res = await db.execute(stmt)
+        items = []
+        for session, dist_count in res.all():
+            resp = StudySessionResponse.model_validate(session)
+            resp.distraction_count = int(dist_count)
+            items.append(resp)
+
+        return items, total_count
+
+    @staticmethod
+    async def get_session_detail(
+        db: AsyncSession,
+        session_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> Optional[StudySessionDetailResponse]:
+        """Retrieve a specific study session by ID with its discrete detection events and top causes."""
+        from app.db.models.detection_event import DetectionEvent
+
+        session = await SessionService.get_session_by_id(db, session_id, user_id)
+        if not session:
+            return None
+
+        # Fetch discrete detection events
+        events_stmt = (
+            select(DetectionEvent)
+            .where(DetectionEvent.session_id == session_id)
+            .order_by(DetectionEvent.started_at.asc(), DetectionEvent.id.asc())
+        )
+        events_res = await db.execute(events_stmt)
+        db_events = events_res.scalars().all()
+
+        # Category breakdown & top causes
+        CATEGORY_LABELS = {
+            "looking_away": "Looking Away",
+            "phone_use": "Phone Use",
+            "yawning": "Yawning",
+            "drowsy": "Drowsiness",
+            "leaning_back": "Bad Posture",
+            "away_from_desk": "Away From Seat",
+        }
+
+        cat_counts: dict[str, int] = {}
+        cat_durations: dict[str, float] = {}
+
+        event_responses = []
+        for evt in db_events:
+            event_responses.append(DetectionEventResponse.model_validate(evt))
+            c = evt.event_type
+            cat_counts[c] = cat_counts.get(c, 0) + 1
+            cat_durations[c] = cat_durations.get(c, 0.0) + (evt.duration_seconds or 0.0)
+
+        # Build category breakdown
+        breakdown = []
+        for cat, count in sorted(cat_counts.items(), key=lambda x: x[1], reverse=True):
+            breakdown.append(
+                SessionCategorySummary(
+                    category=cat,
+                    label=CATEGORY_LABELS.get(cat, cat.replace("_", " ").title()),
+                    count=count,
+                    duration_seconds=round(cat_durations.get(cat, 0.0), 2),
+                )
+            )
+
+        top_causes_list = [
+            CATEGORY_LABELS.get(cat, cat.replace("_", " ").title())
+            for cat, _ in sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        ]
+        top_causes_str = " · ".join(top_causes_list) if top_causes_list else "None detected"
+
+        detail = StudySessionDetailResponse.model_validate(session)
+        detail.distraction_count = len(db_events)
+        detail.events = event_responses
+        detail.top_causes = f"Top causes: {top_causes_str}" if top_causes_list else "No distractions"
+        detail.category_breakdown = breakdown
+
+        return detail
+
 
     @staticmethod
     async def get_active_session(

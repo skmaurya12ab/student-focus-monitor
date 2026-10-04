@@ -40,8 +40,8 @@ The project consists of **15 total phases** (Phase 0 through Phase 14):
 - **Phase 9 — Live dashboard integration (Completed)**
   - Convert the Home / Live Dashboard into a dynamic, real-time monitoring interface preserving the approved Figma design system. Live metrics (Focused, Distracted, Away, Focus Score, Study Time, Distractions) are driven authoritatively by active session and live WebSocket `detection_result` payloads, preventing static Figma sample leaks. Employs a truthful 10-state live badge indicator, contained multi-alert notification chips with duration tracking, browser-compatible Web Audio API chime with edge-triggered deduplication (no audio spam), and a dynamic Focus Timeline representing real session state transitions. Lifecycle separation strictly maintained: stopping live monitoring keeps Study Session active.
 
-- **Phase 10 — Session history and analytics**
-  - Build dashboards for past session reviews, attention trends, distraction heatmaps, and productivity metrics.
+- **Phase 10 — Session history and analytics (Completed)**
+  - Convert Sessions and Analytics pages from static presentation into real historical functionality backed by PostgreSQL. Implements bounded server-side pagination, newest-first deterministic ordering, detailed session inspection with discrete `DetectionEvent`s and top causes, and aggregate analytics with date filtering (`7d`, `30d`, `all`), IANA timezone-aware date bucketing, dynamic trend lines, canonical category breakdowns, and IDOR protection. Zero mock analytics leak into production UI.
 
 - **Phase 11 — Telemetry and user feedback**
   - Anonymize numerical movement telemetry and capture user feedback on distraction alerts (true positives vs. false positives).

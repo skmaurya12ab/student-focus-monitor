@@ -9,8 +9,6 @@ import { AccountPage } from '../../features/account/AccountPage';
 import { useAuth } from '../../context/AuthContext';
 import {
   mockHomeData,
-  mockAnalyticsData,
-  mockSessionsData,
   mockSettingsData,
 } from '../../data/mock';
 
@@ -107,8 +105,8 @@ export const AppShell: React.FC = () => {
       <Sidebar activeTab={activeTab} onNavigate={navigateTo} />
       <main className="sfm-main-content" id="main-content-area" tabIndex={-1}>
         {activeTab === 'home' && <HomePage data={homeData} />}
-        {activeTab === 'analytics' && <AnalyticsPage data={mockAnalyticsData} />}
-        {activeTab === 'sessions' && <SessionsPage data={mockSessionsData} />}
+        {activeTab === 'analytics' && <AnalyticsPage />}
+        {activeTab === 'sessions' && <SessionsPage />}
         {activeTab === 'settings' && (
           <SettingsPage
             data={mockSettingsData}

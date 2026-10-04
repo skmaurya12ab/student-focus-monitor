@@ -1348,6 +1348,157 @@ html, body {
   margin-top: 10px;
 }
 
+/* Pagination Bar */
+.sfm-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 8px 8px 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.sfm-pagination-info {
+  font-size: 12px;
+}
+
+.sfm-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sfm-btn-page {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: #FFFFFF;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sfm-btn-page:hover:not(:disabled) {
+  background: #F4F6F8;
+  border-color: #D1D5DB;
+}
+
+.sfm-btn-page:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Detail Events Table */
+.sfm-detail-events-section {
+  margin-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 18px;
+}
+
+.sfm-detail-events-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.sfm-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sfm-event-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #F9FAFB;
+  font-size: 12px;
+}
+
+.sfm-event-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.sfm-event-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #DC2626;
+}
+
+.sfm-event-times {
+  color: var(--text-secondary);
+}
+
+.sfm-event-duration {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Empty / Loading States */
+.sfm-empty-state-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.sfm-empty-state-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.sfm-empty-state-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 360px;
+}
+
+/* Range Selector Pills */
+.sfm-range-selector-group {
+  display: flex;
+  align-items: center;
+  background: #F3F4F6;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.sfm-range-pill {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sfm-range-pill.is-active {
+  background: #FFFFFF;
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+
 /* ==========================================================================
    Screen 4: Settings Styles
    ========================================================================== */

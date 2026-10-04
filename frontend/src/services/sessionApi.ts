@@ -8,9 +8,42 @@ import {
   StudySessionResponseRaw,
   StudySessionStopResponseRaw,
   ActiveSessionResponse,
+  StudySessionDetail,
+  SessionHistoryResponse,
+  DetectionEventItem,
 } from '../types/session';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+function mapEvent(raw: any): DetectionEventItem {
+  return {
+    id: raw.id,
+    sessionId: raw.session_id,
+    eventType: raw.event_type,
+    startedAt: raw.started_at,
+    endedAt: raw.ended_at,
+    durationSeconds: raw.duration_seconds,
+    detectorVersion: raw.detector_version,
+    metadataJson: raw.metadata_json,
+    createdAt: raw.created_at,
+  };
+}
+
+function mapDetail(raw: any): StudySessionDetail {
+  const base = mapSession(raw);
+  return {
+    ...base,
+    events: (raw.events || []).map(mapEvent),
+    topCauses: raw.top_causes || '',
+    categoryBreakdown: (raw.category_breakdown || []).map((c: any) => ({
+      category: c.category,
+      label: c.label,
+      count: c.count,
+      durationSeconds: c.duration_seconds,
+    })),
+  };
+}
+
 
 function mapSession(raw: StudySessionResponseRaw): StudySession {
   return {
@@ -203,3 +236,80 @@ export async function stopStudySession(sessionId: string): Promise<StudySession>
     throw err;
   }
 }
+
+/**
+ * Retrieve paginated study sessions history for the authenticated user.
+ */
+export async function fetchSessionHistory(
+  page: number = 1,
+  pageSize: number = 10,
+  status?: string
+): Promise<SessionHistoryResponse> {
+  try {
+    let url = `${API_BASE_URL}/api/sessions/history?page=${page}&page_size=${pageSize}`;
+    if (status) {
+      url += `&status=${encodeURIComponent(status)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Not authenticated');
+      throw new Error(`Failed to fetch session history: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return {
+      items: (data.items || []).map(mapSession),
+      total: data.total,
+      page: data.page,
+      pageSize: data.page_size,
+      totalPages: data.total_pages,
+    };
+  } catch (err: any) {
+    if (
+      err.name === 'TypeError' ||
+      err.message?.includes('Failed to fetch') ||
+      err.message?.includes('NetworkError')
+    ) {
+      throw new Error('BACKEND_UNAVAILABLE');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Retrieve detailed study session by ID including discrete detection events.
+ */
+export async function fetchSessionDetail(sessionId: string): Promise<StudySessionDetail> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Not authenticated');
+      if (response.status === 404) throw new Error('Session not found');
+      throw new Error(`Failed to fetch session detail: ${response.statusText}`);
+    }
+
+    const raw = await response.json();
+    return mapDetail(raw);
+  } catch (err: any) {
+    if (
+      err.name === 'TypeError' ||
+      err.message?.includes('Failed to fetch') ||
+      err.message?.includes('NetworkError')
+    ) {
+      throw new Error('BACKEND_UNAVAILABLE');
+    }
+    throw err;
+  }
+}
+

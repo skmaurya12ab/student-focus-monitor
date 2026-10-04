@@ -2,14 +2,16 @@
 from typing import Optional
 import uuid
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.user import User
 from app.db.session import get_async_session
 from app.schemas.session import (
     ActiveSessionResponse,
+    SessionHistoryResponse,
     StudySessionCreateRequest,
+    StudySessionDetailResponse,
     StudySessionResponse,
     StudySessionStopResponse,
 )
@@ -85,26 +87,54 @@ async def get_latest_study_session(
 
 
 @router.get(
+    "/history",
+    response_model=SessionHistoryResponse,
+    summary="Retrieve paginated study sessions history for authenticated user",
+)
+async def get_session_history(
+    page: int = Query(1, ge=1, description="1-indexed page number"),
+    page_size: int = Query(10, ge=1, description="Items per page (max 50)"),
+    status: Optional[str] = Query(None, description="Optional status filter ('active', 'completed')"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+) -> SessionHistoryResponse:
+    """Retrieve paginated historical study sessions for the authenticated user, newest first."""
+    clamped_page_size = min(page_size, 50)
+    items, total = await SessionService.get_session_history(
+        db,
+        current_user.id,
+        page=page,
+        page_size=clamped_page_size,
+        status=status,
+    )
+    total_pages = max(1, (total + clamped_page_size - 1) // clamped_page_size) if total > 0 else 1
+    return SessionHistoryResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=clamped_page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.get(
     "/{session_id}",
-    response_model=StudySessionResponse,
+    response_model=StudySessionDetailResponse,
     summary="Retrieve study session details by ID",
 )
 async def get_study_session(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session),
-) -> StudySessionResponse:
+) -> StudySessionDetailResponse:
     """Retrieve study session details by UUID, strictly enforcing ownership (preventing IDOR)."""
-    session = await SessionService.get_session_by_id(db, session_id, current_user.id)
-    if not session:
+    detail = await SessionService.get_session_detail(db, session_id, current_user.id)
+    if not detail:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Study session not found.",
         )
-    distraction_count = await SessionService.get_distraction_count(db, session.id)
-    resp = StudySessionResponse.model_validate(session)
-    resp.distraction_count = distraction_count
-    return resp
+    return detail
 
 
 @router.post(

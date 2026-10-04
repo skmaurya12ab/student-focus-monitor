@@ -5,6 +5,8 @@ import {
   fetchLatestStudySession,
   fetchStudySessionById,
   stopStudySession,
+  fetchSessionHistory,
+  fetchSessionDetail,
 } from './sessionApi';
 
 describe('sessionApi client tests (HttpOnly cookie session architecture)', () => {
@@ -218,5 +220,102 @@ describe('sessionApi client tests (HttpOnly cookie session architecture)', () =>
     const session = await fetchLatestStudySession();
     expect(session).toBeNull();
   });
+
+  it('fetchSessionHistory calls /api/sessions/history and returns paginated mapped items', async () => {
+    const mockHistoryData = {
+      items: [
+        {
+          id: 's-1',
+          user_id: 'u-1',
+          status: 'completed',
+          started_at: '2026-10-04T10:00:00Z',
+          ended_at: '2026-10-04T11:00:00Z',
+          total_duration_seconds: 3600,
+          focused_seconds: 3000,
+          distracted_seconds: 400,
+          away_seconds: 200,
+          focus_score: 83.33,
+          distraction_count: 3,
+          detector_version: 'v4',
+          feature_schema_version: 'telemetry_v1',
+          created_at: '2026-10-04T10:00:00Z',
+          updated_at: '2026-10-04T11:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockHistoryData,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const history = await fetchSessionHistory(1, 10);
+    expect(history.total).toBe(1);
+    expect(history.items.length).toBe(1);
+    expect(history.items[0].id).toBe('s-1');
+    expect(history.items[0].distractionCount).toBe(3);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/sessions/history?page=1&page_size=10'),
+      expect.objectContaining({ credentials: 'include' })
+    );
+  });
+
+  it('fetchSessionDetail calls /api/sessions/:id and maps discrete events and category causes', async () => {
+    const mockDetailRaw = {
+      id: 's-detail-1',
+      user_id: 'u-1',
+      status: 'completed',
+      started_at: '2026-10-04T10:00:00Z',
+      ended_at: '2026-10-04T11:00:00Z',
+      total_duration_seconds: 3600,
+      focused_seconds: 3200,
+      distracted_seconds: 400,
+      away_seconds: 0,
+      focus_score: 88.89,
+      distraction_count: 2,
+      detector_version: 'v4',
+      feature_schema_version: 'telemetry_v1',
+      created_at: '2026-10-04T10:00:00Z',
+      updated_at: '2026-10-04T11:00:00Z',
+      top_causes: 'Top causes: Phone Use · Looking Away',
+      category_breakdown: [
+        { category: 'phone_use', label: 'Phone Use', count: 1, duration_seconds: 120 },
+      ],
+      events: [
+        {
+          id: 'evt-1',
+          session_id: 's-detail-1',
+          event_type: 'phone_use',
+          started_at: '2026-10-04T10:15:00Z',
+          ended_at: '2026-10-04T10:17:00Z',
+          duration_seconds: 120,
+          detector_version: 'v4',
+          metadata_json: null,
+          created_at: '2026-10-04T10:15:00Z',
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockDetailRaw,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detail = await fetchSessionDetail('s-detail-1');
+    expect(detail.id).toBe('s-detail-1');
+    expect(detail.topCauses).toBe('Top causes: Phone Use · Looking Away');
+    expect(detail.events.length).toBe(1);
+    expect(detail.events[0].eventType).toBe('phone_use');
+    expect(detail.events[0].durationSeconds).toBe(120);
+    expect(detail.categoryBreakdown.length).toBe(1);
+    expect(detail.categoryBreakdown[0].label).toBe('Phone Use');
+  });
 });
+
 

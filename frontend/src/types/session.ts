@@ -52,3 +52,37 @@ export interface StudySessionStopResponseRaw {
   status: string;
   session: StudySessionResponseRaw;
 }
+
+export interface DetectionEventItem {
+  id: string;
+  sessionId: string;
+  eventType: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  detectorVersion: string;
+  metadataJson: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface SessionCategorySummaryItem {
+  category: string;
+  label: string;
+  count: number;
+  durationSeconds: number;
+}
+
+export interface StudySessionDetail extends StudySession {
+  events: DetectionEventItem[];
+  topCauses: string;
+  categoryBreakdown: SessionCategorySummaryItem[];
+}
+
+export interface SessionHistoryResponse {
+  items: StudySession[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
