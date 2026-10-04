@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { SettingsData } from '../../types/dashboard';
 import { ExportCloverIcon, ChevronDownIcon } from '../../components/common/Icons';
 import { useAuth } from '../../context/AuthContext';
+import { fetchUserSettings, updateUserSettings } from '../../services/settingsApi';
+import { alertSoundManager } from '../../services/alertAudio';
+import { UserSettings } from '../../types/settings';
 
 interface SettingsPageProps {
   data: SettingsData;
@@ -9,11 +12,43 @@ interface SettingsPageProps {
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ data, onNavigateToAccount }) => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [thresholds, setThresholds] = useState(data.thresholds);
   const [notifications, setNotifications] = useState(data.notifications);
   const [cameraDevice, setCameraDevice] = useState(data.webcam.selectedDevice);
   const [isSavedMessage, setIsSavedMessage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Load authoritative user settings from backend
+  const loadSettings = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const s: UserSettings = await fetchUserSettings();
+      setThresholds([
+        { id: 'thresh-1', label: 'Yawning', seconds: Math.round(s.yawning_delay_seconds), maxSeconds: 10 },
+        { id: 'thresh-2', label: 'Phone use', seconds: Math.round(s.phone_use_delay_seconds), maxSeconds: 10 },
+        { id: 'thresh-3', label: 'Bad posture', seconds: Math.round(s.leaning_back_delay_seconds), maxSeconds: 10 },
+        { id: 'thresh-4', label: 'Sleeping posture', seconds: Math.round(s.drowsy_delay_seconds), maxSeconds: 10 },
+        { id: 'thresh-5', label: 'Away from seat', seconds: Math.round(s.away_from_desk_delay_seconds), maxSeconds: 10 },
+      ]);
+      setNotifications([
+        { id: 'notif-1', label: 'Beep / sound alerts', enabled: s.sound_alerts_enabled },
+        { id: 'notif-2', label: 'On-screen banner alerts', enabled: s.banner_alerts_enabled },
+        { id: 'notif-3', label: 'Session end summary', enabled: s.session_end_summary_enabled },
+      ]);
+      if (s.camera_device) {
+        setCameraDevice(s.camera_device);
+      }
+      alertSoundManager.setMuted(!s.sound_alerts_enabled);
+    } catch {
+      // Fallback to data defaults gracefully if network/auth not ready
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const adjustThreshold = (id: string, newSeconds: number) => {
     setThresholds((prev) =>
@@ -33,13 +68,51 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ data, onNavigateToAc
     );
   };
 
-  const handleSave = () => {
-    setIsSavedMessage(true);
-    setTimeout(() => setIsSavedMessage(false), 2500);
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    const threshMap = Object.fromEntries(thresholds.map((t) => [t.id, t.seconds]));
+    const notifMap = Object.fromEntries(notifications.map((n) => [n.id, n.enabled]));
+
+    const payload = {
+      yawning_delay_seconds: threshMap['thresh-1'] ?? 2.0,
+      phone_use_delay_seconds: threshMap['thresh-2'] ?? 6.0,
+      leaning_back_delay_seconds: threshMap['thresh-3'] ?? 8.0,
+      drowsy_delay_seconds: threshMap['thresh-4'] ?? 4.0,
+      away_from_desk_delay_seconds: threshMap['thresh-5'] ?? 10.0,
+      sound_alerts_enabled: notifMap['notif-1'] ?? true,
+      banner_alerts_enabled: notifMap['notif-2'] ?? true,
+      session_end_summary_enabled: notifMap['notif-3'] ?? false,
+      camera_device: cameraDevice,
+    };
+
+    try {
+      if (isAuthenticated) {
+        await updateUserSettings(payload);
+      }
+      alertSoundManager.setMuted(!payload.sound_alerts_enabled);
+      setIsSavedMessage(true);
+      setTimeout(() => setIsSavedMessage(false), 2500);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="sfm-page sfm-settings-page" id="settings-page">
+      {/* Error banner if save fails */}
+      {errorMessage && (
+        <div className="sfm-account-banner sfm-account-banner-offline" role="alert" style={{ marginBottom: 16 }}>
+          <span>⚠️ {errorMessage}</span>
+          <button type="button" className="sfm-btn-retry" onClick={() => setErrorMessage(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="sfm-page-header">
         <div className="sfm-header-left">
@@ -223,9 +296,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ data, onNavigateToAc
                 type="button"
                 className="sfm-btn-save-changes"
                 onClick={handleSave}
+                disabled={isSaving}
                 id="btn-save-changes"
               >
-                {isSavedMessage ? 'Saved ✓' : 'Save changes'}
+                {isSaving ? 'Saving...' : isSavedMessage ? 'Saved ✓' : 'Save changes'}
               </button>
             </div>
           </div>

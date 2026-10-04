@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { HomeDashboardData } from '../../types/dashboard';
 import {
   MascotBotIcon,
@@ -14,6 +14,7 @@ import { useSession } from '../../context/SessionContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLiveTransport } from '../../context/LiveTransportContext';
 import { alertSoundManager } from '../../services/alertAudio';
+import { fetchUserSettings } from '../../services/settingsApi';
 import {
   resolveLiveBadgeStatus,
   getDetectorCategoryLabel,
@@ -61,27 +62,43 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
     isLive
   );
 
-  // Audio alert transition feedback (Web Audio API with edge-triggered deduplication)
+  // Audio alert feedback (Web Audio API with repeating pulsating beeps)
   useEffect(() => {
     if (!isLive || !latestDetection) {
-      alertSoundManager.reset();
+      alertSoundManager.stop();
       return;
     }
 
-    const activeCategories = latestDetection.active_detections?.map((d) => d.category) || [];
-    if (latestDetection.state === 'distracted' && activeCategories.length === 0) {
-      activeCategories.push('looking_away');
+    if (latestDetection.state === 'distracted') {
+      const activeCategories = latestDetection.active_detections?.map((d) =>
+        typeof d === 'string' ? d : d.category
+      ) || [];
+      if (activeCategories.length === 0) {
+        activeCategories.push('looking_away');
+      }
+      alertSoundManager.updateActiveDetections(activeCategories);
+    } else {
+      alertSoundManager.updateActiveDetections([]);
     }
-
-    alertSoundManager.updateActiveDetections(activeCategories);
   }, [isLive, latestDetection]);
 
-  // Teardown alert audio edge tracking on unmount
+  // Teardown alert audio on unmount or navigation
   useEffect(() => {
     return () => {
-      alertSoundManager.reset();
+      alertSoundManager.stop();
     };
   }, []);
+
+  // Sync mute state from user settings
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchUserSettings()
+        .then((s) => {
+          alertSoundManager.setMuted(!s.sound_alerts_enabled);
+        })
+        .catch(() => {});
+    }
+  }, [isAuthenticated]);
 
   const formatTimer = (totalSeconds: number): string => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -206,6 +223,32 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
 
     return 'Real-time focus detection';
   };
+
+  const isDistracted = Boolean(isLive && latestDetection?.state === 'distracted');
+
+  const activeAlertLabels = useMemo(() => {
+    if (!latestDetection?.active_detections || latestDetection.active_detections.length === 0) {
+      return ['Distraction Detected'];
+    }
+    return latestDetection.active_detections.map((d) => {
+      const cat = typeof d === 'string' ? d : d.category;
+      const fallback = typeof d === 'string' ? undefined : d.alert_name;
+      return getDetectorCategoryLabel(cat, fallback);
+    });
+  }, [latestDetection]);
+
+  const maxAlertDuration = useMemo(() => {
+    if (!latestDetection?.active_detections) return 0;
+    let maxSec = 0;
+    for (const d of latestDetection.active_detections) {
+      if (typeof d !== 'string' && typeof d.duration_seconds === 'number') {
+        if (d.duration_seconds > maxSec) {
+          maxSec = d.duration_seconds;
+        }
+      }
+    }
+    return maxSec;
+  }, [latestDetection]);
 
   const handleStudySessionClick = async () => {
     alertSoundManager.initOnUserGesture();
@@ -359,6 +402,36 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
           </button>
         </div>
       </header>
+
+      {/* Prominent Persistent Distraction Banner (Phase 9 Correction) */}
+      {isDistracted && (
+        <div
+          className="sfm-persistent-distraction-banner"
+          role="alert"
+          id="persistent-distraction-banner"
+          aria-live="assertive"
+        >
+          <div className="sfm-distraction-banner-icon-wrap">
+            <span className="sfm-distraction-banner-icon" aria-hidden="true">⚠️</span>
+          </div>
+          <div className="sfm-distraction-banner-content">
+            <div className="sfm-distraction-banner-header">
+              <h2 className="sfm-distraction-banner-title">YOU ARE DISTRACTED</h2>
+              {maxAlertDuration > 0 && (
+                <span className="sfm-distraction-banner-duration" id="distraction-banner-duration">
+                  {`Active for ${formatAlertDuration(maxAlertDuration)}`}
+                </span>
+              )}
+            </div>
+            <p className="sfm-distraction-banner-reasons" id="distraction-banner-reasons">
+              {activeAlertLabels.join(' • ')}
+            </p>
+            <p className="sfm-distraction-banner-hint">
+              Please refocus on your study material to resume deep work and stop the alert.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Active Study Session Lifecycle Card */}
       {activeSession && (

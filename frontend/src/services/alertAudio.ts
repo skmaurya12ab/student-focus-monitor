@@ -1,22 +1,32 @@
 /**
- * Browser-compatible Web Audio API alert feedback service (Phase 9).
- * Implements strict edge-triggered deduplication:
- * - Alert starts -> plays chime once.
- * - Alert continues -> no repeated sound spam.
- * - Alert ends -> resets edge state.
- * - Alert starts again later -> plays chime once.
+ * Browser-compatible Web Audio API alert feedback service (Phase 9 Correction).
+ *
+ * Implements managed repeating/pulsating audio feedback:
+ * - Distraction starts -> pulsating alert begins immediately.
+ * - Distraction continues -> pulses repeat continuously (250ms beep + 550ms pause).
+ * - Distraction clears -> repeating alert stops immediately.
+ * - Single managed timer: multiple incoming WebSocket messages or multiple simultaneous
+ *   active detectors NEVER create duplicate overlapping audio loops.
+ * - Maximum application volume (Gain = 1.0) while respecting system/browser volume.
+ * - AudioContext unlocked via user interaction gesture.
  */
 
 export interface AlertSoundOptions {
   muted?: boolean;
   volume?: number;
+  pulseDurationMs?: number;
+  pulseSilenceMs?: number;
 }
 
 export class AlertSoundManager {
   private activeCategories: Set<string> = new Set<string>();
   private audioCtx: AudioContext | null = null;
   private isMuted: boolean = false;
-  private volume: number = 0.18;
+  private volume: number = 1.0; // Maximum usable application-level volume
+  private pulseTimer: ReturnType<typeof setInterval> | null = null;
+  private isPulsating: boolean = false;
+  private pulseDurationMs: number = 250;
+  private pulseSilenceMs: number = 550;
 
   constructor(options?: AlertSoundOptions) {
     if (options?.muted !== undefined) {
@@ -24,6 +34,12 @@ export class AlertSoundManager {
     }
     if (options?.volume !== undefined) {
       this.volume = options.volume;
+    }
+    if (options?.pulseDurationMs !== undefined) {
+      this.pulseDurationMs = options.pulseDurationMs;
+    }
+    if (options?.pulseSilenceMs !== undefined) {
+      this.pulseSilenceMs = options.pulseSilenceMs;
     }
   }
 
@@ -52,75 +68,71 @@ export class AlertSoundManager {
   }
 
   /**
-   * Handle active detection category transitions.
-   * Edge-triggered: plays chime once if ANY new category enters active set.
-   * Does NOT repeat if the alert continues without new categories.
-   * Resets when all categories clear.
+   * Handle active detection category updates.
+   * Starts pulsating beep when distraction begins.
+   * Maintains single ongoing loop while distraction continues.
+   * Stops immediately when all distractions clear.
    *
-   * @param currentCategories Array of active detector category strings (e.g. ['looking_away'])
-   * @returns boolean true if a new alert edge fired and sound was played
+   * @param currentCategories Array of active detector category strings (e.g. ['phone_use', 'looking_away'])
+   * @returns boolean true if the alert is actively pulsating
    */
   public updateActiveDetections(currentCategories: string[]): boolean {
-    const currentSet = new Set(currentCategories);
+    const isDistracted = currentCategories.length > 0;
+    this.activeCategories = new Set(currentCategories);
 
-    // If completely clear, reset edge tracking
-    if (currentSet.size === 0) {
-      this.activeCategories.clear();
+    if (isDistracted) {
+      if (!this.isPulsating) {
+        this.startPulsatingAlert();
+      }
+      return true;
+    } else {
+      if (this.isPulsating) {
+        this.stopPulsatingAlert();
+      }
       return false;
     }
-
-    // Check if there is any new category not previously active
-    let hasNewCategory = false;
-    for (const cat of currentSet) {
-      if (!this.activeCategories.has(cat)) {
-        hasNewCategory = true;
-        break;
-      }
-    }
-
-    // Update active set
-    this.activeCategories = currentSet;
-
-    if (hasNewCategory) {
-      this.playAlertTone();
-      return true;
-    }
-
-    return false;
   }
 
   /**
-   * Reset all edge tracking state.
+   * Start managed pulsating alert loop.
    */
-  public reset(): void {
+  public startPulsatingAlert(): void {
+    if (this.isPulsating) return; // Prevent duplicate timers
+    this.isPulsating = true;
+
+    // Play first pulse immediately
+    this.playBeepPulse();
+
+    const periodMs = this.pulseDurationMs + this.pulseSilenceMs;
+    this.pulseTimer = setInterval(() => {
+      this.playBeepPulse();
+    }, periodMs);
+  }
+
+  /**
+   * Stop managed pulsating alert loop immediately.
+   */
+  public stopPulsatingAlert(): void {
+    if (this.pulseTimer !== null) {
+      clearInterval(this.pulseTimer);
+      this.pulseTimer = null;
+    }
+    this.isPulsating = false;
     this.activeCategories.clear();
   }
 
   /**
-   * Set mute state.
+   * Alias for stopping alert (e.g. on unmount or session stop).
    */
-  public setMuted(muted: boolean): void {
-    this.isMuted = muted;
+  public stop(): void {
+    this.stopPulsatingAlert();
   }
 
   /**
-   * Check if currently muted.
+   * Synthesize a single audible alert beep pulse (250ms) using Web Audio API.
+   * Application-level gain is set to maximum usable level (1.0).
    */
-  public getIsMuted(): boolean {
-    return this.isMuted;
-  }
-
-  /**
-   * Get list of currently tracked active categories.
-   */
-  public getTrackedCategories(): string[] {
-    return Array.from(this.activeCategories);
-  }
-
-  /**
-   * Synthesize pleasant alert chime using Web Audio API oscillator.
-   */
-  public playAlertTone(): void {
+  public playBeepPulse(): void {
     if (this.isMuted) return;
 
     try {
@@ -137,28 +149,90 @@ export class AlertSoundManager {
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
 
+      // Clear, prominent dual-frequency attention beep: 880 Hz (A5)
       osc.type = 'sine';
-      // Harmonic dual-frequency alert tone: 523.25Hz (C5) ramping to 659.25Hz (E5)
-      osc.frequency.setValueAtTime(523.25, now);
-      osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.12);
+      osc.frequency.setValueAtTime(880.0, now);
 
+      const durationSec = this.pulseDurationMs / 1000.0;
+      const rampEnd = Math.max(0.01, durationSec - 0.03);
+
+      // Max usable application volume
       gain.gain.setValueAtTime(this.volume, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      gain.gain.setValueAtTime(this.volume, now + rampEnd);
+      // Clean de-click ramp down right before stop
+      gain.gain.linearRampToValueAtTime(0.001, now + durationSec);
 
       osc.connect(gain);
       gain.connect(this.audioCtx.destination);
 
       osc.start(now);
-      osc.stop(now + 0.35);
+      osc.stop(now + durationSec);
+
+      // Node cleanup
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {
+          // Ignore
+        }
+      };
     } catch {
-      // Audio playback errors handled gracefully without bubbling
+      // Audio errors caught cleanly without breaking UI
     }
   }
 
   /**
-   * Teardown audio context if needed.
+   * Reset all state.
+   */
+  public reset(): void {
+    this.stopPulsatingAlert();
+  }
+
+  /**
+   * Set mute state (e.g. from user Settings).
+   */
+  public setMuted(muted: boolean): void {
+    this.isMuted = muted;
+    if (muted && this.isPulsating) {
+      // Suppress active audio loop
+      this.stopPulsatingAlert();
+    }
+  }
+
+  /**
+   * Check if currently muted.
+   */
+  public getIsMuted(): boolean {
+    return this.isMuted;
+  }
+
+  /**
+   * Check if currently pulsating.
+   */
+  public getIsPulsating(): boolean {
+    return this.isPulsating;
+  }
+
+  /**
+   * Get application volume level.
+   */
+  public getVolume(): number {
+    return this.volume;
+  }
+
+  /**
+   * Get list of currently tracked active categories.
+   */
+  public getTrackedCategories(): string[] {
+    return Array.from(this.activeCategories);
+  }
+
+  /**
+   * Teardown audio context and timers completely.
    */
   public close(): void {
+    this.stopPulsatingAlert();
     if (this.audioCtx) {
       try {
         this.audioCtx.close().catch(() => {});
@@ -167,7 +241,6 @@ export class AlertSoundManager {
       }
       this.audioCtx = null;
     }
-    this.activeCategories.clear();
   }
 }
 

@@ -146,9 +146,16 @@ async def websocket_session_live_transport(
     # 6. Accept connection and emit ready payload
     await websocket.accept()
 
-    # Phase 8: Initialize session detection runtime and register WebSocket callback
+    # Phase 8/9: Load user settings and configure detection runtime
     from app.services.detection_runtime_service import detection_runtime_manager
-    runtime = await detection_runtime_manager.get_or_create_runtime(session_uuid, user.id)
+    from app.services.settings_service import SettingsService
+
+    user_settings = await SettingsService.get_user_settings(db, user.id)
+    detector_config = SettingsService.build_detector_config(user_settings)
+
+    runtime = await detection_runtime_manager.get_or_create_runtime(
+        session_uuid, user.id, config=detector_config
+    )
     runtime.set_result_callback(websocket.send_json)
 
     await websocket.send_json({
@@ -156,6 +163,18 @@ async def websocket_session_live_transport(
         "session_id": str(session_uuid),
         "target_fps": TARGET_FPS,
         "max_frame_size_bytes": MAX_FRAME_SIZE_BYTES,
+        "settings": {
+            "sound_alerts_enabled": user_settings.sound_alerts_enabled,
+            "banner_alerts_enabled": user_settings.banner_alerts_enabled,
+            "delays": {
+                "looking_away": user_settings.looking_away_delay_seconds,
+                "phone_use": user_settings.phone_use_delay_seconds,
+                "yawning": user_settings.yawning_delay_seconds,
+                "drowsy": user_settings.drowsy_delay_seconds,
+                "leaning_back": user_settings.leaning_back_delay_seconds,
+                "away_from_desk": user_settings.away_from_desk_delay_seconds,
+            },
+        },
     })
 
     try:

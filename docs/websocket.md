@@ -242,39 +242,45 @@ Frames are received by the session-scoped detector runtime without modifying tra
 
 ---
 
-## 8. Phase 9 Live Dashboard Integration
+## 8. Phase 9 Live Dashboard Integration & Real-Time Corrections
 
 In Phase 9, the frontend Home dashboard consumes live WebSocket payloads and manages real-time monitoring state:
 
-1. **Truthful Live Badge State Machine**:
+1. **Truthful 12-Condition Live Badge State Machine**:
    - `STANDBY`: Camera transport idle, awaiting user action.
    - `STARTING CAMERA`: Hardware video acquisition initiated.
-   - `CONNECTING`: WebSocket handshake in progress.
+   - `CONNECTING (Initial)`: WebSocket handshake in progress.
+   - `CONNECTING (Reconnecting)`: WebSocket reconnection attempt after dropped link.
    - `CALIBRATING`: Live stream active; calibrating baseline posture (`samples_collected` / `required_samples`).
    - `LIVE / FOCUSED`: Normal focused monitoring state.
    - `LIVE / DISTRACTED`: One or more sustained distraction detectors triggered.
    - `LIVE / AWAY`: Student has vacated desk.
-   - `LIVE DISCONNECTED`: Transport interrupted unexpectedly.
-   - `CAMERA ERROR`: Camera permission denied or device unavailable.
-   - `DETECTOR ERROR`: Runtime detector processing exception.
+   - `LIVE DISCONNECTED`: Transport interrupted unexpectedly while session active.
+   - `CAMERA ERROR (Permission Denied)`: User denied camera access permission.
+   - `CAMERA ERROR (Hardware Unavailable)`: Webcam hardware unavailable or in use by another process.
+   - `DETECTOR ERROR`: Runtime detector processing exception or transport error.
 
-2. **Multiple Simultaneous Active Detections**:
-   - The `active_detections` array in `detection_result` represents all sustained detectors currently active (e.g. `["looking_away", "phone_use"]`).
-   - Each item exposes:
-     - `category`: Canonical detector category key (e.g. `looking_away`).
-     - `alert_name`: Human-readable detector alert name (e.g. `Looking Away`).
-     - `started_at`: Epoch timestamp in seconds.
-     - `duration_seconds`: Sustained active alert duration.
-   - The frontend renders contained alert chips for all active alerts without full-screen modals.
+2. **Persistent Distraction Banner**:
+   - Prominent on-screen banner ("YOU ARE DISTRACTED") visible continuously while in a distracted state.
+   - Displays consolidated active detector reasons (e.g., `Phone Use • Looking Away`) and elapsed active duration.
+   - Synchronized strictly with authoritative `detection_result` messages; automatically disappears when focus is restored.
+   - Does NOT use arbitrary frontend timeout timers.
 
-3. **Web Audio API Alert Deduplication**:
-   - Browser-compatible Web Audio API synthesis (no external audio assets required).
-   - AudioContext initialized and unlocked on user interaction gestures.
-   - Edge-triggered: chime plays **once** on transition into a new active alert category.
-   - **No repeated sound spam** while alerts remain sustained.
-   - Edge state resets cleanly when all active detections clear.
+3. **Repeating / Pulsating Web Audio API Alert Feedback**:
+   - Browser-compatible Web Audio API synthesis (GainNode = 1.0 maximum application-level volume).
+   - AudioContext unlocked from user interaction gestures (e.g. clicking *Start Live Session*).
+   - Beeps in pulsating pulses (~250ms tone + 550ms pause) continuously while distracted.
+   - Stops immediately when focus returns, live monitoring stops, or socket disconnects.
+   - Single managed timer prevents overlapping sound loops across incoming messages or multiple simultaneous detectors.
+   - If sound alerts are disabled in Settings (`sound_alerts_enabled: false`), audio is suppressed while visual banner remains fully functional.
 
-4. **Focus Timeline State Progression**:
+4. **User-Configurable Alert Delays (Persistence Thresholds)**:
+   - Configured via Settings UI (`/api/settings` GET/PATCH) and stored in PostgreSQL `user_settings`.
+   - Loaded authoritatively into `SessionDetectionRuntime` and `MultiCategoryTracker` at WebSocket connection.
+   - Alert thresholds define *how long a detected condition must persist* before becoming an alert (e.g. 2s vs 8s).
+   - Underlying computer-vision feature thresholds (EAR 0.21, MAR 0.55, yaw 10°, hand proximity 0.15) remain strictly separate.
+
+5. **Focus Timeline State Progression**:
    - Real-time slice recording of focus progression (`focused`, `distracted`, `away`, `calibrating`).
    - A brand new session begins with a clean, short initial timeline (no fabricated historical data).
    - Segments scale proportionally to actual recorded durations.

@@ -12,6 +12,10 @@ from app.schemas.session import (
     StudySessionResponse,
     StudySessionStopResponse,
 )
+from app.schemas.settings import (
+    UserSettingsResponse,
+    UserSettingsUpdateRequest,
+)
 from app.schemas.user import (
     AccountDetailResponse,
     UpdateProfileRequest,
@@ -31,4 +35,6 @@ __all__ = [
     "StudySessionResponse",
     "ActiveSessionResponse",
     "StudySessionStopResponse",
+    "UserSettingsResponse",
+    "UserSettingsUpdateRequest",
 ]

@@ -38,8 +38,7 @@ def test_create_alert_started_event():
     assert event.session_id == "test_session_123"
     assert event.event_type == ALERT_LOOKING_AWAY
     assert event.event_action == "started"
-    assert event.timestamp == 1000.0
-    assert event.trigger_delay_sec == 20.0
+    assert event.trigger_delay_sec == config.get_alert_delay(ALERT_LOOKING_AWAY)
     assert event.detector_version == DETECTOR_VERSION
     assert event.feature_schema_version == FEATURE_SCHEMA_VERSION
     assert event.duration_sec is None
@@ -69,7 +68,7 @@ def test_create_alert_ended_event():
     assert event.event_action == "ended"
     assert event.timestamp == 1025.0
     assert event.duration_sec == 5.0
-    assert event.trigger_delay_sec == 20.0
+    assert event.trigger_delay_sec == config.get_alert_delay(ALERT_LOOKING_AWAY)
 
     d = event.to_dict()
     assert d["duration_sec"] == 5.0

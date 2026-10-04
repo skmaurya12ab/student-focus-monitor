@@ -82,12 +82,12 @@ class DetectorConfig:
     # Time persistence before an alert triggers (in seconds)
     alert_delays_sec: dict[str, float] = field(
         default_factory=lambda: {
-            ALERT_LOOKING_AWAY: 20.0,
-            ALERT_PHONE_USE: 20.0,
+            ALERT_LOOKING_AWAY: 10.0,
+            ALERT_PHONE_USE: 6.0,
             ALERT_YAWNING: 2.0,
-            ALERT_DROWSY: 20.0,
-            ALERT_LEANING_BACK: 20.0,
-            ALERT_AWAY_FROM_DESK: 20.0,
+            ALERT_DROWSY: 4.0,
+            ALERT_LEANING_BACK: 8.0,
+            ALERT_AWAY_FROM_DESK: 10.0,
         }
     )
 
@@ -111,4 +111,4 @@ class DetectorConfig:
         cat_id = ALERT_NAME_TO_CATEGORY.get(canonical, "")
         if cat_id in self.alert_delays_sec:
             return float(self.alert_delays_sec[cat_id])
-        return 20.0
+        return 10.0

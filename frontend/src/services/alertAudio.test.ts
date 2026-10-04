@@ -1,32 +1,34 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { AlertSoundManager } from './alertAudio';
 
-describe('AlertSoundManager (Phase 9 Web Audio Alert Feedback)', () => {
+describe('AlertSoundManager (Phase 9 Correction Repeating Audio Feedback)', () => {
   let mockOscillator: any;
   let mockGain: any;
   let mockAudioContext: any;
   let manager: AlertSoundManager;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.restoreAllMocks();
 
     mockOscillator = {
       type: '',
       frequency: {
         setValueAtTime: vi.fn(),
-        exponentialRampToValueAtTime: vi.fn(),
       },
       connect: vi.fn(),
       start: vi.fn(),
       stop: vi.fn(),
+      disconnect: vi.fn(),
     };
 
     mockGain = {
       gain: {
         setValueAtTime: vi.fn(),
-        exponentialRampToValueAtTime: vi.fn(),
+        linearRampToValueAtTime: vi.fn(),
       },
       connect: vi.fn(),
+      disconnect: vi.fn(),
     };
 
     mockAudioContext = {
@@ -45,7 +47,7 @@ describe('AlertSoundManager (Phase 9 Web Audio Alert Feedback)', () => {
       AudioContext: audioContextCtor,
     });
 
-    manager = new AlertSoundManager();
+    manager = new AlertSoundManager({ volume: 1.0, pulseDurationMs: 250, pulseSilenceMs: 550 });
     manager.initOnUserGesture();
   });
 
@@ -55,92 +57,106 @@ describe('AlertSoundManager (Phase 9 Web Audio Alert Feedback)', () => {
     }
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
-  it('triggers alert chime ONCE when an alert starts', () => {
-    const fired = manager.updateActiveDetections(['looking_away']);
-    expect(fired).toBe(true);
+  it('A. distraction starts -> repeating alert starts and plays immediate pulse', () => {
+    const isPulsing = manager.updateActiveDetections(['phone_use']);
+    expect(isPulsing).toBe(true);
+    expect(manager.getIsPulsating()).toBe(true);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
     expect(mockOscillator.start).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT trigger repeated sound while alert remains sustained/active', () => {
-    // 1st frame: alert starts
-    const fired1 = manager.updateActiveDetections(['looking_away']);
-    expect(fired1).toBe(true);
+  it('B. subsequent detection_result messages while distracted do NOT create duplicate loops', () => {
+    manager.updateActiveDetections(['phone_use']);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
 
-    // 2nd frame: sustained
-    const fired2 = manager.updateActiveDetections(['looking_away']);
-    expect(fired2).toBe(false);
+    // 2nd message arrives while still distracted
+    manager.updateActiveDetections(['phone_use']);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
 
-    // 3rd frame: sustained
-    const fired3 = manager.updateActiveDetections(['looking_away']);
-    expect(fired3).toBe(false);
+    // 3rd message arrives
+    manager.updateActiveDetections(['phone_use']);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
   });
 
-  it('resets edge state when alert ends and fires again when alert restarts', () => {
-    // 1. Alert starts
-    expect(manager.updateActiveDetections(['phone_use'])).toBe(true);
+  it('C. distraction remains active -> multiple beep pulses occur across intervals', () => {
+    manager.updateActiveDetections(['phone_use']);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
 
-    // 2. Alert continues
-    expect(manager.updateActiveDetections(['phone_use'])).toBe(false);
-
-    // 3. Alert clears (distraction resolved)
-    expect(manager.updateActiveDetections([])).toBe(false);
-    expect(manager.getTrackedCategories()).toHaveLength(0);
-
-    // 4. Alert begins again later
-    expect(manager.updateActiveDetections(['phone_use'])).toBe(true);
-    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(2);
-  });
-
-  it('handles multiple active detections and triggers sound on newly added category', () => {
-    // 1. Initial distraction: looking_away
-    expect(manager.updateActiveDetections(['looking_away'])).toBe(true);
-    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
-
-    // 2. Second simultaneous distraction arrives: phone_use added
-    expect(manager.updateActiveDetections(['looking_away', 'phone_use'])).toBe(true);
+    // Advance 800ms (250ms beep + 550ms silence)
+    vi.advanceTimersByTime(800);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(2);
 
-    // 3. Both remain active: no repeated chime
-    expect(manager.updateActiveDetections(['looking_away', 'phone_use'])).toBe(false);
-    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(2);
-
-    // 4. One ends, one remains: no chime since no NEW category was added
-    expect(manager.updateActiveDetections(['phone_use'])).toBe(false);
-    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(2);
-
-    // 5. All end
-    expect(manager.updateActiveDetections([])).toBe(false);
-
-    // 6. Yawning begins: new chime
-    expect(manager.updateActiveDetections(['yawning'])).toBe(true);
+    // Advance another 800ms
+    vi.advanceTimersByTime(800);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(3);
   });
 
-  it('respects muted option and does not synthesize audio when muted', () => {
-    manager.setMuted(true);
-    expect(manager.getIsMuted()).toBe(true);
+  it('D. distraction clears -> alert stops immediately and no further pulses occur', () => {
+    manager.updateActiveDetections(['looking_away']);
+    expect(manager.getIsPulsating()).toBe(true);
+    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
 
-    const fired = manager.updateActiveDetections(['drowsy']);
-    // updateActiveDetections returns true for state transition, but playAlertTone suppresses synthesis
-    expect(fired).toBe(true);
-    expect(mockAudioContext.createOscillator).not.toHaveBeenCalled();
+    // Focus restored: empty categories
+    const isPulsing = manager.updateActiveDetections([]);
+    expect(isPulsing).toBe(false);
+    expect(manager.getIsPulsating()).toBe(false);
 
-    manager.setMuted(false);
-    manager.reset();
-    manager.updateActiveDetections(['drowsy']);
+    // Advance time: verify no additional pulses are scheduled
+    vi.advanceTimersByTime(2000);
     expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
   });
 
-  it('safely handles suspended AudioContext by attempting resume on user gesture', async () => {
-    mockAudioContext.state = 'suspended';
-    manager.initOnUserGesture();
-    expect(mockAudioContext.resume).toHaveBeenCalled();
+  it('E. live session ends -> alert stops and audio timers are cleaned', () => {
+    manager.updateActiveDetections(['yawning']);
+    expect(manager.getIsPulsating()).toBe(true);
+
+    manager.stop();
+    expect(manager.getIsPulsating()).toBe(false);
+
+    vi.advanceTimersByTime(1600);
+    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
+  });
+
+  it('F. component unmounts -> close cleanly terminates all timers and audio context', () => {
+    manager.updateActiveDetections(['drowsy']);
+    expect(manager.getIsPulsating()).toBe(true);
+
+    manager.close();
+    expect(manager.getIsPulsating()).toBe(false);
+    expect(mockAudioContext.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('G. multiple active detectors -> still only one distraction alert sound loop', () => {
+    manager.updateActiveDetections(['looking_away', 'phone_use']);
+    expect(manager.getIsPulsating()).toBe(true);
+    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
+
+    // Multiple detections continue
+    manager.updateActiveDetections(['looking_away', 'phone_use', 'leaning_back']);
+    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(1);
+
+    // Only one pulse loop running across intervals
+    vi.advanceTimersByTime(800);
+    expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(2);
+  });
+
+  it('H. application gain is configured at maximum application level (1.0)', () => {
+    expect(manager.getVolume()).toBe(1.0);
+    manager.playBeepPulse();
+    expect(mockGain.gain.setValueAtTime).toHaveBeenCalledWith(1.0, 10.0);
+  });
+
+  it('respects muted option and suppresses beep pulses when sound alerts are disabled', () => {
+    manager.setMuted(true);
+    expect(manager.getIsMuted()).toBe(true);
+
+    manager.updateActiveDetections(['phone_use']);
+    expect(mockAudioContext.createOscillator).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1600);
+    expect(mockAudioContext.createOscillator).not.toHaveBeenCalled();
   });
 });

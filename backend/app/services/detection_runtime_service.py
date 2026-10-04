@@ -37,6 +37,7 @@ from app.detection.config import (
 )
 from app.detection.detector import StudentDistractionDetector
 from app.detection.mediapipe_runtime import MediaPipeRuntime
+from app.detection.trackers import MultiCategoryTracker
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,17 @@ class SessionDetectionRuntime:
     ) -> None:
         """Register or clear the WebSocket result delivery callback."""
         self.result_callback = callback
+
+    def update_config(self, config: DetectorConfig) -> None:
+        """Update detection configuration and dynamically refresh tracker persistence delays."""
+        self.config = config
+        self.detector.config = config
+        self.detector.trackers = MultiCategoryTracker(config)
+        logger.info(
+            "Updated detection configuration and tracker persistence delays for session %s (user %s)",
+            self.session_id,
+            self.user_id,
+        )
 
     def submit_frame(self, frame_bytes: bytes, timestamp: float) -> bool:
         """Submit a frame for processing.
@@ -457,7 +469,15 @@ class DetectionRuntimeManager:
                 runtime.start()
                 self._runtimes[session_id] = runtime
                 logger.info("Initialized new detection runtime for session %s", session_id)
+            elif config is not None:
+                runtime.update_config(config)
             return runtime
+
+    def update_user_runtimes(self, user_id: uuid.UUID, config: DetectorConfig) -> None:
+        """Synchronize updated detector configuration across any active runtimes for this user."""
+        for runtime in self._runtimes.values():
+            if runtime.user_id == user_id:
+                runtime.update_config(config)
 
     def get_runtime(self, session_id: uuid.UUID) -> Optional[SessionDetectionRuntime]:
         """Get the active detection runtime for a session if one exists."""

@@ -365,4 +365,80 @@ describe('HomePage Component (Phase 9 Live Dashboard Behavior & Integrity)', () 
       expect(html).not.toContain('No active session timeline yet');
     });
   });
+
+  describe('Persistent Distraction Banner (Phase 9 Correction)', () => {
+    it('does NOT display banner when user is focused or idle', () => {
+      mockSessionState.activeSession = createMockSession();
+      mockLiveState.isLive = true;
+      mockLiveState.latestDetection = {
+        type: 'detection_result',
+        session_id: 's1',
+        timestamp: 100,
+        state: 'focused',
+        active_detections: [],
+        metrics: { focus_score: 95, focused_seconds: 100, distracted_seconds: 0, away_seconds: 0, distraction_count: 0 },
+        calibration: { complete: true, samples_collected: 30, required_samples: 30, baseline: {} },
+      };
+
+      const html = renderToString(<HomePage data={mockHomeData} />);
+      expect(html).not.toContain('persistent-distraction-banner');
+      expect(html).not.toContain('YOU ARE DISTRACTED');
+    });
+
+    it('displays prominent distraction banner when distraction begins', () => {
+      mockSessionState.activeSession = createMockSession();
+      mockLiveState.isLive = true;
+      mockLiveState.latestDetection = {
+        type: 'detection_result',
+        session_id: 's1',
+        timestamp: 100,
+        state: 'distracted',
+        active_detections: [
+          { category: 'phone_use', alert_name: 'Phone Use', started_at: 94, duration_seconds: 6 },
+        ],
+        metrics: { focus_score: 80, focused_seconds: 90, distracted_seconds: 6, away_seconds: 0, distraction_count: 1 },
+        calibration: { complete: true, samples_collected: 30, required_samples: 30, baseline: {} },
+      };
+
+      const html = renderToString(<HomePage data={mockHomeData} />);
+      expect(html).toContain('persistent-distraction-banner');
+      expect(html).toContain('YOU ARE DISTRACTED');
+      expect(html).toContain('Phone Use');
+      expect(html).toContain('Active for 6s');
+    });
+
+    it('displays single consolidated banner when multiple simultaneous distractions occur', () => {
+      mockSessionState.activeSession = createMockSession();
+      mockLiveState.isLive = true;
+      mockLiveState.latestDetection = {
+        type: 'detection_result',
+        session_id: 's1',
+        timestamp: 100,
+        state: 'distracted',
+        active_detections: [
+          { category: 'phone_use', alert_name: 'Phone Use', started_at: 92, duration_seconds: 8 },
+          { category: 'looking_away', alert_name: 'Looking Away', started_at: 90, duration_seconds: 10 },
+        ],
+        metrics: { focus_score: 75, focused_seconds: 80, distracted_seconds: 10, away_seconds: 0, distraction_count: 2 },
+        calibration: { complete: true, samples_collected: 30, required_samples: 30, baseline: {} },
+      };
+
+      const html = renderToString(<HomePage data={mockHomeData} />);
+      expect(html).toContain('persistent-distraction-banner');
+      expect(html).toContain('YOU ARE DISTRACTED');
+      expect(html).toContain('Phone Use • Looking Away');
+      expect(html).toContain('Active for 10s');
+    });
+
+    it('banner does NOT appear during error states or disconnects', () => {
+      mockSessionState.activeSession = createMockSession();
+      mockLiveState.isLive = false;
+      mockLiveState.state = 'permission_denied';
+      mockLiveState.latestDetection = null;
+
+      const html = renderToString(<HomePage data={mockHomeData} />);
+      expect(html).not.toContain('persistent-distraction-banner');
+      expect(html).toContain('CAMERA ERROR');
+    });
+  });
 });

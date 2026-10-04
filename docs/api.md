@@ -208,11 +208,18 @@ Establishes an ephemeral, bidirectional live transport channel for streaming cam
 
 ---
 
+### 4.2. User Settings & Alert Delays Endpoints (Phase 9)
+
+- **GET `/api/settings`**: Retrieves current authenticated user's configuration, alert persistence delays, and notification preferences.
+- **PATCH `/api/settings`**: Updates alert persistence delays and notification toggles. Immediately persists to PostgreSQL and dynamically updates active live detection runtimes for the user.
+
+---
+
 ## 5. Phase 8/9 Detection & Future Compatibility (Phase 10+)
 
 Phase 6 established the authoritative session container (`id`), Phase 7 established live transport, Phase 8 connected the real MediaPipe detection engine, and Phase 9 integrated the live real-time dashboard:
 - **Phase 8 (Real Detection — Completed)**: Real MediaPipe detector integration into the live stream using the established `detector_hook` seam. Real `detection_events` are persisted in PostgreSQL, and final session focus scores are calculated upon session stop.
-- **Phase 9 (Live Dashboard — Completed)**: Real-time dashboard integration preserving Figma design truth, edge-triggered audio chime with Web Audio API, dynamic session metrics, active distraction alert chips, and live state progression timeline.
+- **Phase 9 (Live Dashboard — Completed)**: Real-time dashboard integration preserving Figma design truth, repeating pulsating audio alert with Web Audio API, prominent persistent distraction banner, user-configurable persistence thresholds via `/api/settings`, dynamic session metrics, and live state progression timeline.
 - **Phase 10 (Session History — Future)**: Historical session analytics, past session detail views, and timeline aggregation.
 - **Phase 11 (Telemetry — Future)**: Telemetry samples will reference `telemetry_samples.session_id`.
 - Zero ML or trained neural network models are used; the deterministic v4-lineage rule-based engine is the production detection engine. ML remains intentionally deferred to Phases 12–14.

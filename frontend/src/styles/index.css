@@ -945,6 +945,91 @@ html, body {
   opacity: 0.85;
 }
 
+/* Prominent Persistent Distraction Banner (Phase 9 Correction) */
+.sfm-persistent-distraction-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background-color: #FEF2F2;
+  border: 2px solid #EF4444;
+  border-radius: 12px;
+  padding: 16px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15);
+  animation: banner-pulse 2s infinite ease-in-out;
+}
+
+@keyframes banner-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15);
+  }
+  50% {
+    box-shadow: 0 6px 22px rgba(239, 68, 68, 0.3);
+  }
+}
+
+.sfm-distraction-banner-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background-color: #FEE2E2;
+  border: 1px solid #FCA5A5;
+  flex-shrink: 0;
+}
+
+.sfm-distraction-banner-icon {
+  font-size: 24px;
+}
+
+.sfm-distraction-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.sfm-distraction-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sfm-distraction-banner-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #991B1B;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.sfm-distraction-banner-duration {
+  font-size: 13px;
+  font-weight: 700;
+  color: #B91C1C;
+  background-color: #FEE2E2;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.sfm-distraction-banner-reasons {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #DC2626;
+}
+
+.sfm-distraction-banner-hint {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4B5563;
+}
+
 .sfm-timeline-labels {
   display: flex;
   justify-content: space-between;
