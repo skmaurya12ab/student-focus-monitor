@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HomeDashboardData } from '../../types/dashboard';
 import {
   MascotBotIcon,
@@ -13,6 +13,13 @@ import {
 import { useSession } from '../../context/SessionContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLiveTransport } from '../../context/LiveTransportContext';
+import { alertSoundManager } from '../../services/alertAudio';
+import {
+  resolveLiveBadgeStatus,
+  getDetectorCategoryLabel,
+  formatAlertDuration,
+} from '../../utils/detectorLabels';
+import { useFocusTimeline } from './useFocusTimeline';
 
 interface HomePageProps {
   data: HomeDashboardData;
@@ -45,6 +52,36 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
   } = useLiveTransport();
   const [authNotice, setAuthNotice] = useState<boolean>(false);
   const [liveNotice, setLiveNotice] = useState<string | null>(null);
+
+  // Focus timeline hook driven by real session state progression
+  const timelineVM = useFocusTimeline(
+    activeSession?.id,
+    activeSession?.startedAt,
+    latestDetection,
+    isLive
+  );
+
+  // Audio alert transition feedback (Web Audio API with edge-triggered deduplication)
+  useEffect(() => {
+    if (!isLive || !latestDetection) {
+      alertSoundManager.reset();
+      return;
+    }
+
+    const activeCategories = latestDetection.active_detections?.map((d) => d.category) || [];
+    if (latestDetection.state === 'distracted' && activeCategories.length === 0) {
+      activeCategories.push('looking_away');
+    }
+
+    alertSoundManager.updateActiveDetections(activeCategories);
+  }, [isLive, latestDetection]);
+
+  // Teardown alert audio edge tracking on unmount
+  useEffect(() => {
+    return () => {
+      alertSoundManager.reset();
+    };
+  }, []);
 
   const formatTimer = (totalSeconds: number): string => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -104,7 +141,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
     ? latestDetection.metrics.distraction_count
     : (currentSession ? (currentSession.distractionCount ?? 0) : 0);
 
-  // Formatted displayed metrics
+  // Formatted displayed metrics — NEVER static Figma defaults
   const displayedFocused = currentSession ? formatDurationHMS(focusedSeconds) : '00:00:00';
   const displayedDistracted = currentSession ? formatDurationHMS(distractedSeconds) : '00:00:00';
   const displayedAway = currentSession ? formatDurationHMS(awaySeconds) : '00:00:00';
@@ -127,59 +164,51 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
   const distractedCircumference = 88;
   const distractedDashoffset = Math.max(0, distractedCircumference - (distractedCircumference * Math.min(100, distractedPercent)) / 100);
 
-  const resolveLiveStatusText = (): string => {
+  // Truthful live badge status resolver
+  const liveBadge = resolveLiveBadgeStatus(isLive, liveState, latestDetection);
+
+  // Dynamic subheading for live focus assistant
+  const resolveAssistantSubheading = (): string => {
+    if (!activeSession) {
+      return 'Real-time focus detection · Start a study session first';
+    }
     if (!isLive) {
-      if (liveState === 'starting_camera') return 'STARTING';
-      if (liveState === 'connecting') return 'CONNECTING';
-      if (
-        liveState === 'permission_denied' ||
-        liveState === 'camera_unavailable' ||
-        liveState === 'connection_error'
-      ) {
-        return 'DETECTOR ERROR';
-      }
-      if (liveState === 'disconnected') return 'LIVE DISCONNECTED';
-      return 'STANDBY';
+      if (liveState === 'starting_camera') return 'Accessing camera hardware...';
+      if (liveState === 'connecting') return 'Connecting live detection transport...';
+      if (liveState === 'permission_denied') return 'Camera permission denied · Please allow access';
+      if (liveState === 'camera_unavailable') return 'Camera hardware unavailable';
+      if (liveState === 'connection_error') return 'Transport connection error';
+      if (liveState === 'disconnected') return 'Live transport disconnected';
+      return 'Real-time focus detection · Ready to monitor';
     }
 
-    if (!latestDetection) {
-      return 'MONITORING';
+    if (!latestDetection || latestDetection.state === 'calibrating') {
+      const collected = latestDetection?.calibration?.samples_collected ?? 0;
+      const required = latestDetection?.calibration?.required_samples ?? 30;
+      return `Calibrating baseline posture (${collected}/${required} samples)...`;
     }
 
-    if (latestDetection.state === 'calibrating') {
-      return 'CALIBRATING';
-    }
-
-    if (latestDetection.active_detections && latestDetection.active_detections.length > 0) {
-      return latestDetection.active_detections[0].alert_name.toUpperCase();
+    if ((latestDetection.state as string) === 'detector_error') {
+      return 'Detector runtime error encountered';
     }
 
     if (latestDetection.state === 'distracted') {
-      return 'DISTRACTED';
+      return 'Distraction detected — please refocus';
     }
 
     if (latestDetection.state === 'away') {
-      return 'AWAY';
+      return 'Student is away from desk';
     }
 
     if (latestDetection.state === 'focused') {
-      return 'FOCUSED';
+      return 'Maintaining focus — posture & gaze normal';
     }
 
-    return 'MONITORING';
-  };
-
-  const resolveLiveIndicatorClass = (): string => {
-    if (!isLive) {
-      return `is-${liveState}`;
-    }
-    if (!latestDetection) {
-      return 'is-monitoring';
-    }
-    return `is-${latestDetection.state}`;
+    return 'Real-time focus detection';
   };
 
   const handleStudySessionClick = async () => {
+    alertSoundManager.initOnUserGesture();
     if (!isAuthenticated) {
       setAuthNotice(true);
       return;
@@ -198,6 +227,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
   };
 
   const handleLiveSessionClick = async () => {
+    alertSoundManager.initOnUserGesture();
     if (!activeSession) {
       setLiveNotice('Please start a Study Session first before beginning live camera monitoring.');
       return;
@@ -344,7 +374,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 <span className="sfm-lifecycle-status-badge" id="active-session-status-badge">active</span>
               </div>
               <p className="sfm-lifecycle-meta">
-                Started at {new Date(activeSession.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Container for upcoming live monitoring
+                Started at {new Date(activeSession.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Container for live camera monitoring
               </p>
             </div>
           </div>
@@ -376,12 +406,12 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
           {/* Left Preview Box */}
           <div className="sfm-video-preview-box">
             <div
-              className={`sfm-live-indicator ${resolveLiveIndicatorClass()}`}
+              className={`sfm-live-indicator ${liveBadge.indicatorClass}`}
               id="live-transport-indicator"
             >
-              <span className={`sfm-live-dot ${isLive ? 'is-pulsing' : ''}`}>●</span>
+              <span className={`sfm-live-dot ${liveBadge.isPulsing ? 'is-pulsing' : ''}`}>●</span>
               <span className="sfm-live-text" id="live-transport-status-text">
-                {resolveLiveStatusText()}
+                {liveBadge.text}
               </span>
             </div>
             <div className="sfm-mock-camera-frame" id="live-camera-preview-container">
@@ -404,7 +434,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
             <h2 id="live-assistant-heading" className="sfm-card-heading">
               Live Focus Assistant
             </h2>
-            <p className="sfm-card-subheading">Real-time focus detection</p>
+            <p className="sfm-card-subheading">{resolveAssistantSubheading()}</p>
             <button
               type="button"
               className={`sfm-btn-live-session ${isLive ? 'is-live-active' : ''}`}
@@ -430,8 +460,76 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                   : 'Start Live Session'}
               </span>
             </button>
-          </div>
 
+            {/* Contained Active Alerts / Details */}
+            {isLive && latestDetection && (
+              <div className="sfm-live-alert-container" id="live-active-alerts-container">
+                {latestDetection.state === 'distracted' && (
+                  <>
+                    <div className="sfm-live-alert-header">
+                      <span className="sfm-alert-badge is-distracted" id="live-alert-badge-distracted">
+                        ⚠️ DISTRACTED
+                      </span>
+                    </div>
+                    {latestDetection.active_detections && latestDetection.active_detections.length > 0 ? (
+                      <div className="sfm-alert-chips" id="live-alert-chips-list">
+                        {latestDetection.active_detections.map((det, idx) => (
+                          <span
+                            key={`${det.category}-${idx}`}
+                            className="sfm-alert-chip"
+                            id={`alert-chip-${det.category}`}
+                          >
+                            <span>{getDetectorCategoryLabel(det.category, det.alert_name)}</span>
+                            <span className="sfm-alert-chip-duration">
+                              {`(${formatAlertDuration(det.duration_seconds)})`}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="sfm-alert-chips">
+                        <span className="sfm-alert-chip">
+                          <span>Distraction Active</span>
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {latestDetection.state === 'away' && (
+                  <div className="sfm-live-alert-header">
+                    <span className="sfm-alert-badge is-away" id="live-alert-badge-away">
+                      🏃 AWAY FROM DESK
+                    </span>
+                  </div>
+                )}
+
+                {latestDetection.state === 'calibrating' && (
+                  <div className="sfm-live-alert-header">
+                    <span className="sfm-alert-badge is-calibrating" id="live-alert-badge-calibrating">
+                      {`🎯 CALIBRATING (${latestDetection.calibration?.samples_collected ?? 0}/${latestDetection.calibration?.required_samples ?? 30})`}
+                    </span>
+                  </div>
+                )}
+
+                {latestDetection.state === 'focused' && (
+                  <div className="sfm-live-alert-header">
+                    <span className="sfm-alert-badge is-focused" id="live-alert-badge-focused">
+                      ✓ FOCUSED
+                    </span>
+                  </div>
+                )}
+
+                {(latestDetection.state as string) === 'detector_error' && (
+                  <div className="sfm-live-alert-header">
+                    <span className="sfm-alert-badge is-error" id="live-alert-badge-error">
+                      ⚠️ DETECTOR ERROR
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Right Live Stats */}
           <div className="sfm-live-stats-list">
@@ -440,7 +538,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 <TargetFocusIcon size={15} color="#171A24" />
                 <span>Focused</span>
               </div>
-              <span className="sfm-stat-value">{displayedFocused}</span>
+              <span className="sfm-stat-value" id="live-metric-focused">{displayedFocused}</span>
             </div>
 
             <div className="sfm-stat-divider" />
@@ -450,7 +548,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 <AlertTriangleIcon size={15} color="#171A24" />
                 <span>Distracted</span>
               </div>
-              <span className="sfm-stat-value">{displayedDistracted}</span>
+              <span className="sfm-stat-value" id="live-metric-distracted">{displayedDistracted}</span>
             </div>
 
             <div className="sfm-stat-divider" />
@@ -460,7 +558,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 <AwayCircleIcon size={15} color="#171A24" />
                 <span>Away</span>
               </div>
-              <span className="sfm-stat-value">{displayedAway}</span>
+              <span className="sfm-stat-value" id="live-metric-away">{displayedAway}</span>
             </div>
           </div>
         </section>
@@ -483,29 +581,49 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 viewBox="0 0 240 60"
                 preserveAspectRatio="none"
               >
-                {data.focusScore.sparklineSegments.map((seg, idx) => (
-                  <g key={idx}>
+                {focusScoreVal !== null ? (
+                  <>
                     <line
-                      x1={seg.startX}
-                      y1={seg.startY}
-                      x2={seg.endX}
-                      y2={seg.endY}
+                      x1="10"
+                      y1={Math.max(10, Math.min(50, 60 - focusScoreVal * 0.5))}
+                      x2="230"
+                      y2={Math.max(10, Math.min(50, 60 - focusScoreVal * 0.5))}
                       stroke="#75A564"
                       strokeWidth="2.2"
                       strokeLinecap="round"
                     />
-                    <circle cx={seg.startX} cy={seg.startY} r="2.5" fill="#75A564" />
-                    <circle cx={seg.endX} cy={seg.endY} r="2.5" fill="#75A564" />
-                  </g>
-                ))}
-                {/* final point */}
-                <circle cx="232" cy="24" r="2.5" fill="#75A564" />
+                    <circle
+                      cx="10"
+                      cy={Math.max(10, Math.min(50, 60 - focusScoreVal * 0.5))}
+                      r="3"
+                      fill="#75A564"
+                    />
+                    <circle
+                      cx="230"
+                      cy={Math.max(10, Math.min(50, 60 - focusScoreVal * 0.5))}
+                      r="3"
+                      fill="#75A564"
+                    />
+                  </>
+                ) : (
+                  <line
+                    x1="10"
+                    y1="30"
+                    x2="230"
+                    y2="30"
+                    stroke="#D1D5DB"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                  />
+                )}
               </svg>
             </div>
 
             <div className="sfm-metric-footer">
-              <div className="sfm-big-metric">{displayedFocusScore}</div>
-              <div className="sfm-metric-change">{currentSession ? (activeSession ? 'Live calculation' : 'Session score') : 'No session data'}</div>
+              <div className="sfm-big-metric" id="card-metric-focus-score">{displayedFocusScore}</div>
+              <div className="sfm-metric-change">
+                {currentSession ? (activeSession ? 'Live calculation' : 'Session score') : 'No session data'}
+              </div>
             </div>
           </section>
 
@@ -522,7 +640,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
               <span className="sfm-metric-sublabel">
                 Study Time
               </span>
-              <div className="sfm-big-metric sfm-time-value">
+              <div className="sfm-big-metric sfm-time-value" id="card-metric-study-time">
                 {displayedStudyTime}
               </div>
               <span className="sfm-metric-note">{studyTimeNote}</span>
@@ -607,7 +725,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
               <span className="sfm-metric-sublabel">
                 {data.interactionActivity.subtitle}
               </span>
-              <div className="sfm-big-metric sfm-activity-value">
+              <div className="sfm-big-metric sfm-activity-value" id="card-metric-distractions">
                 {displayedDistractions}
               </div>
               <span className="sfm-metric-note">
@@ -617,13 +735,19 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
 
             {/* Blue Activity Bars */}
             <div className="sfm-activity-bars" aria-hidden="true">
-              {data.interactionActivity.bars.map((bar, idx) => (
-                <div
-                  key={idx}
-                  className="sfm-activity-bar"
-                  style={{ height: `${bar.heightPercent}%` }}
-                />
-              ))}
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((barIdx) => {
+                const heightPercent =
+                  distractionCount > 0
+                    ? Math.min(100, Math.max(15, distractionCount * 12 + ((barIdx * 7) % 25)))
+                    : 15;
+                return (
+                  <div
+                    key={barIdx}
+                    className="sfm-activity-bar"
+                    style={{ height: `${heightPercent}%`, opacity: distractionCount > 0 ? 1 : 0.4 }}
+                  />
+                );
+              })}
             </div>
           </section>
         </div>
@@ -640,15 +764,15 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
 
             <div className="sfm-timeline-legend">
               <div className="sfm-legend-item">
-                <span className="sfm-legend-dot" />
+                <span className="sfm-legend-dot is-focused" />
                 <span>Focused</span>
               </div>
               <div className="sfm-legend-item">
-                <span className="sfm-legend-dot" />
+                <span className="sfm-legend-dot is-distracted" />
                 <span>Distracted</span>
               </div>
               <div className="sfm-legend-item">
-                <span className="sfm-legend-dot" />
+                <span className="sfm-legend-dot is-away" />
                 <span>Away</span>
               </div>
             </div>
@@ -656,81 +780,33 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
 
           {/* Timeline Graphical Bar */}
           <div className="sfm-timeline-track" aria-label="Visual Focus Timeline">
-            <div className="sfm-timeline-segments">
-              {/* Segment 1: Green 10:00 - ~10:28 */}
-              <div
-                className="sfm-segment sfm-segment-focused"
-                style={{ flex: 26 }}
-                title="Focused: 10:00 AM - 10:28 AM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 2: Green 10:30 - ~10:48 */}
-              <div
-                className="sfm-segment sfm-segment-focused"
-                style={{ flex: 25 }}
-                title="Focused: 10:30 AM - 10:48 AM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 3: Red 10:49 - 10:56 */}
-              <div
-                className="sfm-segment sfm-segment-distracted"
-                style={{ flex: 9 }}
-                title="Distracted: 10:49 AM - 10:56 AM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 4: Green 10:57 - 11:27 */}
-              <div
-                className="sfm-segment sfm-segment-focused"
-                style={{ flex: 34 }}
-                title="Focused: 10:57 AM - 11:27 AM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 5: Red 11:28 - 11:37 */}
-              <div
-                className="sfm-segment sfm-segment-distracted"
-                style={{ flex: 10 }}
-                title="Distracted: 11:28 AM - 11:37 AM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 6: Green 11:38 - 12:00 */}
-              <div
-                className="sfm-segment sfm-segment-focused"
-                style={{ flex: 27 }}
-                title="Focused: 11:38 AM - 12:00 PM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 7: Red 12:01 - 12:08 */}
-              <div
-                className="sfm-segment sfm-segment-distracted"
-                style={{ flex: 8 }}
-                title="Distracted: 12:01 PM - 12:08 PM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 8: Green 12:09 - 12:35 */}
-              <div
-                className="sfm-segment sfm-segment-focused"
-                style={{ flex: 36 }}
-                title="Focused: 12:09 PM - 12:35 PM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 9: Red 12:36 - 12:41 */}
-              <div
-                className="sfm-segment sfm-segment-distracted"
-                style={{ flex: 6 }}
-                title="Distracted: 12:36 PM - 12:41 PM"
-              />
-              <div className="sfm-segment-gap" style={{ flex: 1 }} />
-              {/* Segment 10: Green 12:42 - 12:58 */}
-              <div
-                className="sfm-segment sfm-segment-focused"
-                style={{ flex: 30 }}
-                title="Focused: 12:42 PM - 12:58 PM"
-              />
-            </div>
+            {timelineVM.isEmpty ? (
+              <div className="sfm-timeline-empty" id="focus-timeline-empty-track">
+                <span>No active session timeline yet. Start a study session to track focus progression.</span>
+              </div>
+            ) : (
+              <div className="sfm-timeline-segments" id="focus-timeline-segments-track">
+                {timelineVM.segments.map((seg, idx) => (
+                  <React.Fragment key={seg.id || idx}>
+                    {idx > 0 && <div className="sfm-segment-gap" style={{ flex: 1 }} />}
+                    <div
+                      className={`sfm-segment sfm-segment-${seg.state}`}
+                      style={{
+                        flex: Math.max(
+                          1,
+                          Math.round((seg.durationSeconds / Math.max(1, timelineVM.totalSeconds)) * 100)
+                        ),
+                      }}
+                      title={`${seg.state.charAt(0).toUpperCase() + seg.state.slice(1)}: ${Math.round(seg.durationSeconds)}s`}
+                    />
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
 
             {/* Time labels below bar */}
             <div className="sfm-timeline-labels">
-              {data.focusTimeline.timeMarks.map((mark, idx) => (
+              {timelineVM.timeMarks.map((mark, idx) => (
                 <span key={idx} className="sfm-time-tick">
                   {mark}
                 </span>
@@ -740,7 +816,11 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
 
           {/* Grid note footer */}
           <div className="sfm-timeline-footer-note">
-            <span>{data.focusTimeline.footerNote}</span>
+            <span>
+              {activeSession
+                ? 'Session Timeline: Real-time focus progression · Updates dynamically during live monitoring'
+                : 'Focus progression will be recorded when an active study session is monitored'}
+            </span>
           </div>
         </section>
       </div>

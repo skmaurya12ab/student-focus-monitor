@@ -37,8 +37,8 @@ The project consists of **15 total phases** (Phase 0 through Phase 14):
 - **Phase 8 — Real monitoring / Real detection (Completed)**
   - Connect live browser video frames to the modular detection engine in real-time. Employs session-isolated runtimes (`SessionDetectionRuntime`), asynchronous worker execution, bounded backpressure queue (`maxsize=1`, freshest-frame priority), strictly monotonic MediaPipe timestamps, discrete `DetectionEvent` persistence to PostgreSQL on state transitions, session stop metric finalization, and live `detection_result` WebSocket payloads without raw media storage.
 
-- **Phase 9 — Live dashboard integration**
-  - Connect frontend monitoring UI with realtime detection streams, audio/visual distraction alerts, and focus state indicators.
+- **Phase 9 — Live dashboard integration (Completed)**
+  - Convert the Home / Live Dashboard into a dynamic, real-time monitoring interface preserving the approved Figma design system. Live metrics (Focused, Distracted, Away, Focus Score, Study Time, Distractions) are driven authoritatively by active session and live WebSocket `detection_result` payloads, preventing static Figma sample leaks. Employs a truthful 10-state live badge indicator, contained multi-alert notification chips with duration tracking, browser-compatible Web Audio API chime with edge-triggered deduplication (no audio spam), and a dynamic Focus Timeline representing real session state transitions. Lifecycle separation strictly maintained: stopping live monitoring keeps Study Session active.
 
 - **Phase 10 — Session history and analytics**
   - Build dashboards for past session reviews, attention trends, distraction heatmaps, and productivity metrics.

@@ -163,6 +163,12 @@ Run Phase 8 detection integration tests:
 pytest tests/detection/test_phase8_detection_integration.py -v
 ```
 
+Run Phase 9 live dashboard integration tests:
+
+```bash
+pytest tests/detection/test_phase9_live_dashboard_integration.py -v
+```
+
 ### Frontend Tests
 
 From the `frontend/` directory:

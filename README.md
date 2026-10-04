@@ -6,13 +6,15 @@ A privacy-first web application designed to help students maintain deep focus du
 
 ---
 
-## 📌 Project Status: Phase 1 — Project Bootstrap
+## 📌 Project Status: Phase 9 — Live Dashboard Integration
 
-> **Notice:** This repository is currently at **Phase 1 (Bootstrap & Development Environment)**.
-> - **Live monitoring, camera feeds, MediaPipe/OpenCV, and ML models are NOT yet implemented.**
-> - The reference detector script (`student_distraction_detector_v4.py`) remains untouched for refactoring in Phase 2.
-> - No database tables, migrations, or authentication systems are active.
-> - Phase 1 delivers a clean monorepo architecture, runnable FastAPI backend with health checking, React + Vite frontend bootstrap screen, PostgreSQL container configuration, automated tests, and GitHub Actions CI.
+> **Notice:** This repository is currently at **Phase 9 (Live Dashboard Integration)**.
+> - **Full real-time live monitoring dashboard with real MediaPipe webcam processing and WebSocket live transport is active.**
+> - Truthful live states (`CALIBRATING`, `FOCUSED`, `DISTRACTED`, `AWAY`, `LIVE DISCONNECTED`, `CAMERA ERROR`, `DETECTOR ERROR`).
+> - Web Audio API alert sound with strict edge-triggered deduplication.
+> - Dynamic session metrics, active distraction alert chips, and real-time state progression timeline.
+> - Zero mock-data leakage into active runtime.
+> - Phase 10 (Session History & Analytics) is next. ML remains intentionally deferred.
 
 ---
 

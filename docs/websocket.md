@@ -240,3 +240,43 @@ live_transport_manager.detector_hook = detection_runtime_manager.submit_frame
 ```
 Frames are received by the session-scoped detector runtime without modifying transport protocol or auth. The detector worker processes frames asynchronously via MediaPipe and broadcasts structured `detection_result` payloads back over the active WebSocket.
 
+---
+
+## 8. Phase 9 Live Dashboard Integration
+
+In Phase 9, the frontend Home dashboard consumes live WebSocket payloads and manages real-time monitoring state:
+
+1. **Truthful Live Badge State Machine**:
+   - `STANDBY`: Camera transport idle, awaiting user action.
+   - `STARTING CAMERA`: Hardware video acquisition initiated.
+   - `CONNECTING`: WebSocket handshake in progress.
+   - `CALIBRATING`: Live stream active; calibrating baseline posture (`samples_collected` / `required_samples`).
+   - `LIVE / FOCUSED`: Normal focused monitoring state.
+   - `LIVE / DISTRACTED`: One or more sustained distraction detectors triggered.
+   - `LIVE / AWAY`: Student has vacated desk.
+   - `LIVE DISCONNECTED`: Transport interrupted unexpectedly.
+   - `CAMERA ERROR`: Camera permission denied or device unavailable.
+   - `DETECTOR ERROR`: Runtime detector processing exception.
+
+2. **Multiple Simultaneous Active Detections**:
+   - The `active_detections` array in `detection_result` represents all sustained detectors currently active (e.g. `["looking_away", "phone_use"]`).
+   - Each item exposes:
+     - `category`: Canonical detector category key (e.g. `looking_away`).
+     - `alert_name`: Human-readable detector alert name (e.g. `Looking Away`).
+     - `started_at`: Epoch timestamp in seconds.
+     - `duration_seconds`: Sustained active alert duration.
+   - The frontend renders contained alert chips for all active alerts without full-screen modals.
+
+3. **Web Audio API Alert Deduplication**:
+   - Browser-compatible Web Audio API synthesis (no external audio assets required).
+   - AudioContext initialized and unlocked on user interaction gestures.
+   - Edge-triggered: chime plays **once** on transition into a new active alert category.
+   - **No repeated sound spam** while alerts remain sustained.
+   - Edge state resets cleanly when all active detections clear.
+
+4. **Focus Timeline State Progression**:
+   - Real-time slice recording of focus progression (`focused`, `distracted`, `away`, `calibrating`).
+   - A brand new session begins with a clean, short initial timeline (no fabricated historical data).
+   - Segments scale proportionally to actual recorded durations.
+
+

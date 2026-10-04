@@ -162,6 +162,31 @@ class SessionDetectionRuntime:
             except Exception as e:
                 self.error_count += 1
                 logger.error("Error in detection processing for session %s: %s", self.session_id, e)
+                if self.result_callback is not None:
+                    try:
+                        await self.result_callback({
+                            "type": "detection_result",
+                            "session_id": str(self.session_id),
+                            "timestamp": timestamp,
+                            "state": "detector_error",
+                            "error": str(e),
+                            "active_detections": [],
+                            "metrics": {
+                                "focus_score": round(self.detector.session_state.calculate_focus_score(), 2) if self.detector else 0.0,
+                                "focused_seconds": round(self.detector.focused_seconds, 2) if self.detector else 0.0,
+                                "distracted_seconds": round(self.detector.distracted_seconds, 2) if self.detector else 0.0,
+                                "away_seconds": round(self.detector.away_seconds, 2) if self.detector else 0.0,
+                                "distraction_count": self.detector.distraction_count if self.detector else 0,
+                            },
+                            "calibration": {
+                                "complete": False,
+                                "samples_collected": 0,
+                                "required_samples": self.config.minimum_calibration_samples,
+                                "baseline": None,
+                            },
+                        })
+                    except Exception:
+                        pass
             finally:
                 self.frame_queue.task_done()
 
