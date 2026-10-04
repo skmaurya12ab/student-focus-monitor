@@ -167,9 +167,9 @@ def compute_hand_cheek_distances(
             y = getattr(lm, "y", None) if hasattr(lm, "y") else lm[1]
             pts.append([float(x), float(y)])
 
-        hand_center = np.mean(pts, axis=0)
-        dist_left = float(np.linalg.norm(hand_center - left_cheek))
-        dist_right = float(np.linalg.norm(hand_center - right_cheek))
+        hand_pts = np.array(pts, dtype=np.float64)
+        dist_left = float(np.min(np.linalg.norm(hand_pts - left_cheek, axis=1)))
+        dist_right = float(np.min(np.linalg.norm(hand_pts - right_cheek, axis=1)))
         distance = min(dist_left, dist_right)
         distances.append((dist_left, dist_right, distance))
 

@@ -78,13 +78,13 @@ def is_leaning_back(features: FeatureSnapshot, config: DetectorConfig) -> bool:
     """
     Leaning Back condition:
     Evaluates whether the student's pose is present and their shoulder depth z-deviation
-    from their calibrated baseline exceeds the configured positive threshold.
+    from their calibrated baseline exceeds the configured threshold.
     """
     if not features.pose_present:
         return False
     if features.shoulder_z_delta is None:
         return False
-    return features.shoulder_z_delta > config.lean_back_z_delta
+    return abs(features.shoulder_z_delta) > config.lean_back_z_delta
 
 
 def is_away_from_desk(features: FeatureSnapshot, _config: DetectorConfig) -> bool:

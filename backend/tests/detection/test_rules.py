@@ -113,12 +113,14 @@ def test_rule_drowsy_true_and_false_and_boundary():
 def test_rule_leaning_back_true_and_false_and_boundary():
     cfg = DetectorConfig(lean_back_z_delta=0.15)
 
-    # True when shoulder delta exceeds threshold
+    # True when shoulder delta exceeds threshold (positive or negative depth displacement)
     assert is_leaning_back(_base_snapshot(shoulder_z_delta=0.16), cfg)
     assert is_leaning_back(_base_snapshot(shoulder_z_delta=0.30), cfg)
+    assert is_leaning_back(_base_snapshot(shoulder_z_delta=-0.18), cfg)
 
     # False at boundary or below
     assert not is_leaning_back(_base_snapshot(shoulder_z_delta=0.15), cfg)  # boundary
+    assert not is_leaning_back(_base_snapshot(shoulder_z_delta=-0.15), cfg)  # negative boundary
     assert not is_leaning_back(_base_snapshot(shoulder_z_delta=0.05), cfg)
     assert not is_leaning_back(_base_snapshot(shoulder_z_delta=-0.10), cfg)
 

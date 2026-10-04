@@ -109,6 +109,13 @@ def test_compute_hand_cheek_distance():
     _, _, far_dist = compute_hand_cheek_distances(face, hand_far)
     assert far_dist > 0.3
 
+    # Multi-point hand: wrist far down (0.25, 0.85), index finger touching cheek (0.26, 0.51)
+    hand_multi = [[MockLandmark(0.25, 0.85), MockLandmark(0.26, 0.51)]]
+    l_d, r_d, m_d = compute_hand_cheek_distances(face, hand_multi)
+    # The true minimum distance should be based on the finger closest to cheek, not the far wrist
+    assert m_d < 0.05
+    assert l_d < 0.05
+
 
 def test_compute_shoulder_z():
     # Shoulders: LEFT=11, RIGHT=12
