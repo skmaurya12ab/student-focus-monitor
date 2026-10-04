@@ -47,6 +47,32 @@ class SessionService:
         result = await db.execute(stmt)
         return result.scalars().first()
 
+    @staticmethod
+    async def get_latest_session(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+    ) -> Optional[StudySession]:
+        """Retrieve the most recent study session for the given user, whether active or completed."""
+        stmt = (
+            select(StudySession)
+            .where(StudySession.user_id == user_id)
+            .order_by(StudySession.started_at.desc())
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    @staticmethod
+    async def get_distraction_count(
+        db: AsyncSession,
+        session_id: uuid.UUID,
+    ) -> int:
+        """Count discrete distraction detection events recorded for this session."""
+        from app.db.models.detection_event import DetectionEvent
+        from sqlalchemy import func
+        stmt = select(func.count(DetectionEvent.id)).where(DetectionEvent.session_id == session_id)
+        result = await db.execute(stmt)
+        return int(result.scalar() or 0)
+
     @classmethod
     async def create_session(
         cls,

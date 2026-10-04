@@ -83,25 +83,35 @@ def mouth_aspect_ratio(landmarks: Any, w: int, h: int) -> float:
     return float(np.linalg.norm(top - bottom) / horizontal)
 
 
+# Canonical 3D facial landmark model points for 6-point solvePnP head pose estimation
+# Order: 1 (nose tip), 199 (chin), 33 (left eye outer), 263 (right eye outer), 61 (left mouth), 291 (right mouth)
+CANONICAL_FACE_3D = np.array([
+    [0.0, 0.0, 0.0],          # 1: Nose tip
+    [0.0, -330.0, -65.0],     # 199: Chin
+    [-225.0, 170.0, -135.0],  # 33: Left eye corner
+    [225.0, 170.0, -135.0],   # 263: Right eye corner
+    [-150.0, -150.0, -125.0], # 61: Left mouth corner
+    [150.0, -150.0, -125.0],  # 291: Right mouth corner
+], dtype=np.float64)
+HEAD_POSE_LANDMARK_ORDER = (1, 199, 33, 263, 61, 291)
+
+
 def compute_head_pose(landmarks: Any, w: int, h: int) -> tuple[float, float, float]:
     """
-    6-point solvePnP head-pose estimation.
+    6-point solvePnP head-pose estimation using canonical 3D facial geometry.
     Returns (pitch, yaw, roll) in degrees.
     """
-    face_2d, face_3d = [], []
+    face_2d = []
 
-    for idx in (33, 263, 1, 61, 291, 199):
+    for idx in HEAD_POSE_LANDMARK_ORDER:
         lm = landmarks[idx]
         x = getattr(lm, "x", None) if hasattr(lm, "x") else lm[0]
         y = getattr(lm, "y", None) if hasattr(lm, "y") else lm[1]
-        z = getattr(lm, "z", 0.0) if hasattr(lm, "z") else (lm[2] if len(lm) > 2 else 0.0)
 
         px, py = float(x) * w, float(y) * h
         face_2d.append([px, py])
-        face_3d.append([px, py, float(z)])
 
     face_2d = np.array(face_2d, dtype=np.float64)
-    face_3d = np.array(face_3d, dtype=np.float64)
 
     focal_length = float(w)
     cam_matrix = np.array(
@@ -115,7 +125,7 @@ def compute_head_pose(landmarks: Any, w: int, h: int) -> tuple[float, float, flo
     dist_matrix = np.zeros((4, 1), dtype=np.float64)
 
     success, rot_vec, _ = cv2.solvePnP(
-        face_3d,
+        CANONICAL_FACE_3D,
         face_2d,
         cam_matrix,
         dist_matrix,
@@ -128,9 +138,9 @@ def compute_head_pose(landmarks: Any, w: int, h: int) -> tuple[float, float, flo
     rmat, _ = cv2.Rodrigues(rot_vec)
     angles, _, _, _, _, _ = cv2.RQDecomp3x3(rmat)
 
-    pitch = float(angles[0] * 360)
-    yaw = float(angles[1] * 360)
-    roll = float(angles[2] * 360)
+    pitch = float(angles[0])
+    yaw = float(angles[1])
+    roll = float(angles[2])
 
     return pitch, yaw, roll
 
@@ -300,7 +310,19 @@ def extract_features_from_landmarks(
     Authoritative pure function to extract all numerical features from raw landmark sets.
     """
     face_present = bool(face_landmarks)
-    pose_present = bool(pose_landmarks)
+    pose_present = False
+    if pose_landmarks:
+        try:
+            l_sh = pose_landmarks[LEFT_SHOULDER_IDX]
+            r_sh = pose_landmarks[RIGHT_SHOULDER_IDX]
+            l_vis = getattr(l_sh, "visibility", None)
+            r_vis = getattr(r_sh, "visibility", None)
+            if l_vis is not None and r_vis is not None:
+                pose_present = float(l_vis) >= 0.4 and float(r_vis) >= 0.4
+            else:
+                pose_present = True
+        except (IndexError, TypeError, KeyError):
+            pose_present = bool(pose_landmarks)
     hand_count = len(hand_landmarks_list) if hand_landmarks_list else 0
 
     pitch = yaw = roll = None

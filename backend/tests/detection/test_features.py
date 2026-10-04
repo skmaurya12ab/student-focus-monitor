@@ -161,3 +161,43 @@ def test_missing_landmark_handling():
     assert snapshot.hand_cheek_distance is None
     assert snapshot.shoulder_z is None
     assert snapshot.head_yaw_from_baseline is None
+
+
+def test_compute_head_pose_degrees_accuracy():
+    """Verify solvePnP + RQDecomp3x3 calculates head yaw in true degrees without 360x multiplier."""
+    import cv2
+    import numpy as np
+
+    w, h = 640, 480
+    focal = float(w)
+    cam_matrix = np.array([[focal, 0, w / 2], [0, focal, h / 2], [0, 0, 1]], dtype=np.float64)
+    dist_matrix = np.zeros((4, 1), dtype=np.float64)
+
+    face_3d = np.array([
+        [0.0, 0.0, 0.0],          # 1: Nose tip
+        [0.0, -330.0, -65.0],     # 199: Chin
+        [-225.0, 170.0, -135.0],  # 33: Left eye corner
+        [225.0, 170.0, -135.0],   # 263: Right eye corner
+        [-150.0, -150.0, -125.0], # 61: Left mouth corner
+        [150.0, -150.0, -125.0]   # 291: Right mouth corner
+    ], dtype=np.float64)
+
+    # 15 degrees yaw rotation
+    rvec_true = np.array([0.0, np.deg2rad(15.0), 0.0], dtype=np.float64)
+    tvec_true = np.array([0.0, 0.0, 1000.0], dtype=np.float64)
+    projected, _ = cv2.projectPoints(face_3d, rvec_true, tvec_true, cam_matrix, dist_matrix)
+    projected = projected.reshape(-1, 2)
+
+    landmarks = {
+        1: MockLandmark(projected[0][0] / w, projected[0][1] / h),
+        199: MockLandmark(projected[1][0] / w, projected[1][1] / h),
+        33: MockLandmark(projected[2][0] / w, projected[2][1] / h),
+        263: MockLandmark(projected[3][0] / w, projected[3][1] / h),
+        61: MockLandmark(projected[4][0] / w, projected[4][1] / h),
+        291: MockLandmark(projected[5][0] / w, projected[5][1] / h),
+    }
+
+    pitch, yaw, roll = compute_head_pose(landmarks, w, h)
+    assert yaw == pytest.approx(15.0, abs=1.0)
+    assert abs(pitch) < 2.0
+    assert abs(roll) < 2.0

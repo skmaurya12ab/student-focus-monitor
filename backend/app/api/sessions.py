@@ -57,9 +57,31 @@ async def get_active_study_session(
 ) -> ActiveSessionResponse:
     """Get the currently active study session for the authenticated user, or null if none is active."""
     session = await SessionService.get_active_session(db, current_user.id)
-    return ActiveSessionResponse(
-        session=StudySessionResponse.model_validate(session) if session else None
-    )
+    if not session:
+        return ActiveSessionResponse(session=None)
+    distraction_count = await SessionService.get_distraction_count(db, session.id)
+    resp = StudySessionResponse.model_validate(session)
+    resp.distraction_count = distraction_count
+    return ActiveSessionResponse(session=resp)
+
+
+@router.get(
+    "/latest",
+    response_model=ActiveSessionResponse,
+    summary="Retrieve current user's most recent study session",
+)
+async def get_latest_study_session(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+) -> ActiveSessionResponse:
+    """Get the most recent study session for the authenticated user, whether active or completed."""
+    session = await SessionService.get_latest_session(db, current_user.id)
+    if not session:
+        return ActiveSessionResponse(session=None)
+    distraction_count = await SessionService.get_distraction_count(db, session.id)
+    resp = StudySessionResponse.model_validate(session)
+    resp.distraction_count = distraction_count
+    return ActiveSessionResponse(session=resp)
 
 
 @router.get(
@@ -79,7 +101,10 @@ async def get_study_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Study session not found.",
         )
-    return StudySessionResponse.model_validate(session)
+    distraction_count = await SessionService.get_distraction_count(db, session.id)
+    resp = StudySessionResponse.model_validate(session)
+    resp.distraction_count = distraction_count
+    return resp
 
 
 @router.post(
@@ -94,7 +119,10 @@ async def stop_study_session(
 ) -> StudySessionStopResponse:
     """Stop an active study session, computing authoritative duration server-side and marking status completed."""
     session = await SessionService.stop_session(db, session_id, current_user.id)
+    distraction_count = await SessionService.get_distraction_count(db, session.id)
+    resp = StudySessionResponse.model_validate(session)
+    resp.distraction_count = distraction_count
     return StudySessionStopResponse(
         status="success",
-        session=StudySessionResponse.model_validate(session),
+        session=resp,
     )

@@ -26,6 +26,7 @@ class StudySessionResponse(BaseModel):
     distracted_seconds: float = 0.0
     away_seconds: float = 0.0
     focus_score: Optional[Decimal] = None
+    distraction_count: int = 0
     detector_version: str = "v4"
     feature_schema_version: str = "telemetry_v1"
     created_at: datetime

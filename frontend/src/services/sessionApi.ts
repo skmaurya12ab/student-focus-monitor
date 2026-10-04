@@ -24,6 +24,7 @@ function mapSession(raw: StudySessionResponseRaw): StudySession {
     distractedSeconds: raw.distracted_seconds,
     awaySeconds: raw.away_seconds,
     focusScore: raw.focus_score,
+    distractionCount: raw.distraction_count ?? 0,
     detectorVersion: raw.detector_version,
     featureSchemaVersion: raw.feature_schema_version,
     createdAt: raw.created_at,
@@ -90,6 +91,38 @@ export async function fetchActiveStudySession(): Promise<StudySession | null> {
         return null;
       }
       throw new Error(`Failed to fetch active session: ${response.statusText}`);
+    }
+
+    const data: ActiveSessionResponse = await response.json();
+    return data.session ? mapSession(data.session) : null;
+  } catch (err: any) {
+    if (
+      err.name === 'TypeError' ||
+      err.message?.includes('Failed to fetch') ||
+      err.message?.includes('NetworkError')
+    ) {
+      throw new Error('BACKEND_UNAVAILABLE');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Retrieve the most recent study session (active or completed), or null if none exists.
+ */
+export async function fetchLatestStudySession(): Promise<StudySession | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/sessions/latest`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        return null;
+      }
+      throw new Error(`Failed to fetch latest session: ${response.statusText}`);
     }
 
     const data: ActiveSessionResponse = await response.json();

@@ -13,6 +13,7 @@ import React, {
 import { StudySession } from '../types/session';
 import {
   fetchActiveStudySession,
+  fetchLatestStudySession,
   startStudySession,
   stopStudySession,
 } from '../services/sessionApi';
@@ -20,6 +21,7 @@ import { useAuth } from './AuthContext';
 
 interface SessionContextType {
   activeSession: StudySession | null;
+  lastCompletedSession: StudySession | null;
   isLoading: boolean;
   isStarting: boolean;
   isStopping: boolean;
@@ -37,6 +39,7 @@ const SessionContext = createContext<SessionContextType | undefined>(undefined);
 export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { isAuthenticated, user } = useAuth();
   const [activeSession, setActiveSession] = useState<StudySession | null>(null);
+  const [lastCompletedSession, setLastCompletedSession] = useState<StudySession | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isStarting, setIsStarting] = useState<boolean>(false);
   const [isStopping, setIsStopping] = useState<boolean>(false);
@@ -51,6 +54,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   const refreshActiveSession = useCallback(async () => {
     if (!isAuthenticated) {
       setActiveSession(null);
+      setLastCompletedSession(null);
       setIsLoading(false);
       return;
     }
@@ -60,6 +64,11 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       setSessionError(null);
       const session = await fetchActiveStudySession();
       setActiveSession(session);
+      if (!session) {
+        // Retrieve student's most recent completed session
+        const latest = await fetchLatestStudySession();
+        setLastCompletedSession(latest);
+      }
       setIsBackendUnavailable(false);
     } catch (err: any) {
       if (err.message === 'BACKEND_UNAVAILABLE') {
@@ -133,6 +142,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       setSessionError(null);
       const completedSession = await stopStudySession(activeSession.id);
       setActiveSession(null);
+      setLastCompletedSession(completedSession);
       setIsBackendUnavailable(false);
       return completedSession;
     } catch (err: any) {
@@ -151,6 +161,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     <SessionContext.Provider
       value={{
         activeSession,
+        lastCompletedSession,
         isLoading,
         isStarting,
         isStopping,

@@ -14,6 +14,7 @@ export interface StudySession {
   distractedSeconds: number;
   awaySeconds: number;
   focusScore: number | null;
+  distractionCount: number;
   detectorVersion: string;
   featureSchemaVersion: string;
   createdAt: string;
@@ -40,6 +41,7 @@ export interface StudySessionResponseRaw {
   distracted_seconds: number;
   away_seconds: number;
   focus_score: number | null;
+  distraction_count?: number;
   detector_version: string;
   feature_schema_version: string;
   created_at: string;

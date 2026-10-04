@@ -21,6 +21,7 @@ interface HomePageProps {
 export const HomePage: React.FC<HomePageProps> = ({ data }) => {
   const {
     activeSession,
+    lastCompletedSession,
     isStarting,
     isStopping,
     sessionError,
@@ -53,6 +54,129 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
       return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const formatDurationHMS = (totalSeconds: number): string => {
+    const sec = Math.max(0, Math.floor(totalSeconds));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const formatDurationReadable = (totalSeconds: number): string => {
+    const sec = Math.max(0, Math.floor(totalSeconds));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (h > 0) {
+      return `${h}h ${m}m`;
+    }
+    return `${m}m`;
+  };
+
+  // Authoritative current session: active session if in progress, else last completed session
+  const currentSession = activeSession || lastCompletedSession;
+
+  // Real metric values derived from live WebSocket stream when monitoring, or authoritative session record
+  const focusedSeconds = (activeSession && latestDetection?.metrics)
+    ? latestDetection.metrics.focused_seconds
+    : (currentSession ? currentSession.focusedSeconds : 0);
+
+  const distractedSeconds = (activeSession && latestDetection?.metrics)
+    ? latestDetection.metrics.distracted_seconds
+    : (currentSession ? currentSession.distractedSeconds : 0);
+
+  const awaySeconds = (activeSession && latestDetection?.metrics)
+    ? latestDetection.metrics.away_seconds
+    : (currentSession ? currentSession.awaySeconds : 0);
+
+  const studyTimeSeconds = activeSession
+    ? elapsedSeconds
+    : (currentSession ? currentSession.totalDurationSeconds : 0);
+
+  const focusScoreVal = (activeSession && latestDetection?.metrics)
+    ? latestDetection.metrics.focus_score
+    : (currentSession?.focusScore !== null && currentSession?.focusScore !== undefined
+      ? Number(currentSession.focusScore)
+      : null);
+
+  const distractionCount = (activeSession && latestDetection?.metrics)
+    ? latestDetection.metrics.distraction_count
+    : (currentSession ? (currentSession.distractionCount ?? 0) : 0);
+
+  // Formatted displayed metrics
+  const displayedFocused = currentSession ? formatDurationHMS(focusedSeconds) : '00:00:00';
+  const displayedDistracted = currentSession ? formatDurationHMS(distractedSeconds) : '00:00:00';
+  const displayedAway = currentSession ? formatDurationHMS(awaySeconds) : '00:00:00';
+  const displayedStudyTime = currentSession ? formatDurationReadable(studyTimeSeconds) : '0m';
+  const displayedFocusScore = focusScoreVal !== null ? `${Math.round(focusScoreVal)}%` : '--';
+  const displayedDistractions = distractionCount;
+
+  // Time management donut stats
+  const studyTimeNote = activeSession
+    ? 'Active study session'
+    : currentSession
+    ? 'Latest session duration'
+    : 'No sessions yet';
+  const focusedPercent = studyTimeSeconds > 0 ? Math.round((focusedSeconds / studyTimeSeconds) * 100) : 0;
+  const distractedPercent = studyTimeSeconds > 0 ? Math.round((distractedSeconds / studyTimeSeconds) * 100) : 0;
+  const displayedFocusedDonut = `${formatDurationReadable(focusedSeconds)} (${focusedPercent}%)`;
+  const displayedDistractedDonut = `${formatDurationReadable(distractedSeconds)} (${distractedPercent}%)`;
+  const focusedCircumference = 88;
+  const focusedDashoffset = Math.max(0, focusedCircumference - (focusedCircumference * Math.min(100, focusedPercent)) / 100);
+  const distractedCircumference = 88;
+  const distractedDashoffset = Math.max(0, distractedCircumference - (distractedCircumference * Math.min(100, distractedPercent)) / 100);
+
+  const resolveLiveStatusText = (): string => {
+    if (!isLive) {
+      if (liveState === 'starting_camera') return 'STARTING';
+      if (liveState === 'connecting') return 'CONNECTING';
+      if (
+        liveState === 'permission_denied' ||
+        liveState === 'camera_unavailable' ||
+        liveState === 'connection_error'
+      ) {
+        return 'DETECTOR ERROR';
+      }
+      if (liveState === 'disconnected') return 'LIVE DISCONNECTED';
+      return 'STANDBY';
+    }
+
+    if (!latestDetection) {
+      return 'MONITORING';
+    }
+
+    if (latestDetection.state === 'calibrating') {
+      return 'CALIBRATING';
+    }
+
+    if (latestDetection.active_detections && latestDetection.active_detections.length > 0) {
+      return latestDetection.active_detections[0].alert_name.toUpperCase();
+    }
+
+    if (latestDetection.state === 'distracted') {
+      return 'DISTRACTED';
+    }
+
+    if (latestDetection.state === 'away') {
+      return 'AWAY';
+    }
+
+    if (latestDetection.state === 'focused') {
+      return 'FOCUSED';
+    }
+
+    return 'MONITORING';
+  };
+
+  const resolveLiveIndicatorClass = (): string => {
+    if (!isLive) {
+      return `is-${liveState}`;
+    }
+    if (!latestDetection) {
+      return 'is-monitoring';
+    }
+    return `is-${latestDetection.state}`;
   };
 
   const handleStudySessionClick = async () => {
@@ -252,26 +376,12 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
           {/* Left Preview Box */}
           <div className="sfm-video-preview-box">
             <div
-              className={`sfm-live-indicator is-${
-                isLive && latestDetection?.state ? latestDetection.state : liveState
-              }`}
+              className={`sfm-live-indicator ${resolveLiveIndicatorClass()}`}
               id="live-transport-indicator"
             >
               <span className={`sfm-live-dot ${isLive ? 'is-pulsing' : ''}`}>●</span>
               <span className="sfm-live-text" id="live-transport-status-text">
-                {isLive
-                  ? (latestDetection?.state
-                      ? (latestDetection.state === 'calibrating'
-                          ? 'CALIBRATING'
-                          : latestDetection.active_detections && latestDetection.active_detections.length > 0
-                          ? latestDetection.active_detections[0].alert_name.toUpperCase()
-                          : latestDetection.state.toUpperCase())
-                      : 'LIVE')
-                  : liveState === 'connecting'
-                  ? 'CONNECTING'
-                  : liveState === 'starting_camera'
-                  ? 'STARTING'
-                  : 'STANDBY'}
+                {resolveLiveStatusText()}
               </span>
             </div>
             <div className="sfm-mock-camera-frame" id="live-camera-preview-container">
@@ -330,7 +440,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 <TargetFocusIcon size={15} color="#171A24" />
                 <span>Focused</span>
               </div>
-              <span className="sfm-stat-value">{data.liveStats.focused}</span>
+              <span className="sfm-stat-value">{displayedFocused}</span>
             </div>
 
             <div className="sfm-stat-divider" />
@@ -340,7 +450,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 <AlertTriangleIcon size={15} color="#171A24" />
                 <span>Distracted</span>
               </div>
-              <span className="sfm-stat-value">{data.liveStats.distracted}</span>
+              <span className="sfm-stat-value">{displayedDistracted}</span>
             </div>
 
             <div className="sfm-stat-divider" />
@@ -350,7 +460,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 <AwayCircleIcon size={15} color="#171A24" />
                 <span>Away</span>
               </div>
-              <span className="sfm-stat-value">{data.liveStats.away}</span>
+              <span className="sfm-stat-value">{displayedAway}</span>
             </div>
           </div>
         </section>
@@ -394,8 +504,8 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
             </div>
 
             <div className="sfm-metric-footer">
-              <div className="sfm-big-metric">{data.focusScore.score}%</div>
-              <div className="sfm-metric-change">{data.focusScore.changeText}</div>
+              <div className="sfm-big-metric">{displayedFocusScore}</div>
+              <div className="sfm-metric-change">{currentSession ? (activeSession ? 'Live calculation' : 'Session score') : 'No session data'}</div>
             </div>
           </section>
 
@@ -410,12 +520,12 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
 
             <div className="sfm-time-management-body">
               <span className="sfm-metric-sublabel">
-                {data.timeManagement.studyTime && 'Study Time'}
+                Study Time
               </span>
               <div className="sfm-big-metric sfm-time-value">
-                {data.timeManagement.studyTime}
+                {displayedStudyTime}
               </div>
-              <span className="sfm-metric-note">{data.timeManagement.totalLabel}</span>
+              <span className="sfm-metric-note">{studyTimeNote}</span>
             </div>
 
             <div className="sfm-donut-row">
@@ -438,7 +548,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                     stroke="#65E815"
                     strokeWidth="4.5"
                     strokeDasharray="88 88"
-                    strokeDashoffset="20"
+                    strokeDashoffset={focusedDashoffset}
                     strokeLinecap="round"
                   />
                 </svg>
@@ -447,7 +557,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                     {data.timeManagement.focusedLabel}
                   </span>
                   <span className="sfm-donut-val">
-                    {data.timeManagement.focusedValue}
+                    {displayedFocusedDonut}
                   </span>
                 </div>
               </div>
@@ -471,7 +581,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                     stroke="#FF4C4F"
                     strokeWidth="4.5"
                     strokeDasharray="88 88"
-                    strokeDashoffset="65"
+                    strokeDashoffset={distractedDashoffset}
                     strokeLinecap="round"
                   />
                 </svg>
@@ -480,7 +590,7 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                     {data.timeManagement.distractedLabel}
                   </span>
                   <span className="sfm-donut-val">
-                    {data.timeManagement.distractedValue}
+                    {displayedDistractedDonut}
                   </span>
                 </div>
               </div>
@@ -498,10 +608,10 @@ export const HomePage: React.FC<HomePageProps> = ({ data }) => {
                 {data.interactionActivity.subtitle}
               </span>
               <div className="sfm-big-metric sfm-activity-value">
-                {data.interactionActivity.distractions}
+                {displayedDistractions}
               </div>
               <span className="sfm-metric-note">
-                {data.interactionActivity.todayLabel}
+                {activeSession ? 'Current session' : currentSession ? 'Session total' : data.interactionActivity.todayLabel}
               </span>
             </div>
 

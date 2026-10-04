@@ -65,3 +65,5 @@ backend/data/
 *.swo
 .DS_Store
 Thumbs.db
+scratch/
+

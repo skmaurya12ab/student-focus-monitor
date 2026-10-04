@@ -314,33 +314,48 @@ class SessionDetectionRuntime:
             },
             "calibration": {
                 "complete": self.detector.calibration.complete,
-                "samples_collected": len(self.detector.calibration.shoulder_z),
+                "samples_collected": max(len(self.detector.calibration.head_yaw), len(self.detector.calibration.shoulder_z)),
                 "required_samples": self.config.minimum_calibration_samples,
                 "baseline": baseline_dict,
             },
         }
 
     async def stop(self, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
-        """Stop detection runtime, finalize open active events, and return final metrics."""
+        """Stop detection runtime following strict finalization order:
+        1. Stop accepting new frame submissions (is_running = False)
+        2. Allow accepted detector work in queue to finalize
+        3. Finalize active detection events in PostgreSQL
+        4. Calculate final session metrics from detector session state
+        5. Close MediaPipe vision tasks runtime
+        """
+        # Step 1: stop accepting new frame submissions
         self.is_running = False
 
+        # Step 2: allow accepted detector work to finalize
         if self.worker_task and not self.worker_task.done():
             task = self.worker_task
             try:
-                current_loop = asyncio.get_running_loop()
-            except RuntimeError:
-                current_loop = None
+                # Wait briefly (up to 500ms) for frame queue to empty and in-flight work to complete
+                await asyncio.wait_for(self.frame_queue.join(), timeout=0.5)
+            except (asyncio.TimeoutError, Exception):
+                pass
+            finally:
+                if not task.done():
+                    try:
+                        current_loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        current_loop = None
 
-            if current_loop and task.get_loop() is current_loop:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-            else:
-                task_loop = task.get_loop()
-                if not task_loop.is_closed():
-                    task_loop.call_soon_threadsafe(task.cancel)
+                    if current_loop and task.get_loop() is current_loop:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                    else:
+                        task_loop = task.get_loop()
+                        if not task_loop.is_closed():
+                            task_loop.call_soon_threadsafe(task.cancel)
 
         now = time.time()
         now_dt = datetime.fromtimestamp(now, tz=timezone.utc)

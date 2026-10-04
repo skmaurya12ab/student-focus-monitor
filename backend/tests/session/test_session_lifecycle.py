@@ -304,3 +304,60 @@ async def test_start_new_session_after_completing_prior_session(db_session):
         assert active.json()["session"]["id"] == session2_id
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_get_latest_session_lifecycle_and_invariants(db_session):
+    """Verify /api/sessions/latest retrieves the most recent session and satisfies duration invariants."""
+    app.dependency_overrides[get_async_session] = lambda: db_session
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/api/auth/dev-login",
+            json={"email": "latest_test@example.com", "display_name": "Latest Student"},
+        )
+
+        # 1. No sessions initially
+        res0 = await client.get("/api/sessions/latest")
+        assert res0.status_code == 200
+        assert res0.json()["session"] is None
+
+        # 2. Start session
+        res1 = await client.post("/api/sessions", json={})
+        session1_id = res1.json()["id"]
+
+        # Latest should return active session 1
+        res2 = await client.get("/api/sessions/latest")
+        assert res2.status_code == 200
+        assert res2.json()["session"]["id"] == session1_id
+        assert res2.json()["session"]["status"] == "active"
+
+        await asyncio.sleep(0.1)
+
+        # 3. Stop session
+        stop_res = await client.post(f"/api/sessions/{session1_id}/stop")
+        assert stop_res.status_code == 200
+
+        # Latest should now return completed session 1
+        res3 = await client.get("/api/sessions/latest")
+        assert res3.status_code == 200
+        latest = res3.json()["session"]
+        assert latest["id"] == session1_id
+        assert latest["status"] == "completed"
+
+        # Verify duration invariant: total_duration_seconds ≈ ended_at - started_at
+        started_dt = datetime.fromisoformat(latest["started_at"])
+        ended_dt = datetime.fromisoformat(latest["ended_at"])
+        expected_dur = (ended_dt - started_dt).total_seconds()
+        assert abs(latest["total_duration_seconds"] - expected_dur) < 0.1
+        assert latest["total_duration_seconds"] >= 0.05
+
+        # Verify metrics invariants
+        assert latest["focused_seconds"] >= 0
+        assert latest["distracted_seconds"] >= 0
+        assert latest["away_seconds"] >= 0
+        assert latest["focused_seconds"] + latest["distracted_seconds"] + latest["away_seconds"] <= latest["total_duration_seconds"] + 0.1
+        assert "distraction_count" in latest
+
+    app.dependency_overrides.clear()

@@ -94,13 +94,14 @@ class CalibrationBuffer:
 
         elapsed = now - (self.started_at or now)
 
-        if (
-            elapsed >= req_sec
-            and len(self.shoulder_z) >= min_samp
-            and len(self.head_yaw) >= min_samp
-        ):
+        if elapsed >= req_sec and len(self.head_yaw) >= min_samp:
+            shoulder_baseline = (
+                float(np.median(self.shoulder_z))
+                if len(self.shoulder_z) > 0
+                else None
+            )
             self.baseline = CalibrationBaseline(
-                shoulder_z=float(np.median(self.shoulder_z)),
+                shoulder_z=shoulder_baseline,
                 head_yaw=float(np.median(self.head_yaw)),
                 head_pitch=float(np.median(self.head_pitch))
                 if self.head_pitch
