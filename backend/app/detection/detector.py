@@ -107,6 +107,7 @@ class StudentDistractionDetector:
                 head_yaw=features.head_yaw,
                 head_pitch=features.head_pitch,
                 head_roll=features.head_roll,
+                torso_aspect_ratio=features.torso_aspect_ratio,
                 required_seconds=self.config.calibration_seconds,
                 min_samples=self.config.minimum_calibration_samples,
             )
@@ -133,6 +134,9 @@ class StudentDistractionDetector:
             features.head_pitch_from_baseline = pd
             features.head_roll_from_baseline = rd
             features.shoulder_z_delta = sd
+            features.torso_posture_delta = self.calibration.compute_posture_delta(
+                features.torso_aspect_ratio
+            )
 
         # 1. Rule evaluation
         conditions = evaluate_rules(features, self.config)

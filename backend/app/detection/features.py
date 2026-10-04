@@ -196,6 +196,40 @@ def compute_shoulder_z(pose_landmarks: Any) -> Optional[float]:
         return None
 
 
+def compute_torso_aspect_ratio(pose_landmarks: Any) -> Optional[float]:
+    """
+    Compute dimension-free 3D torso geometry aspect ratio:
+    vertical distance (shoulder_mid.y - nose.y) / 3D shoulder width.
+    Scale- and camera-distance invariant measure of posture recline.
+    """
+    if not pose_landmarks:
+        return None
+    try:
+        l_sh = pose_landmarks[LEFT_SHOULDER_IDX]
+        r_sh = pose_landmarks[RIGHT_SHOULDER_IDX]
+        nose = pose_landmarks[0]
+
+        l_x = float(getattr(l_sh, "x", None) if hasattr(l_sh, "x") else l_sh[0])
+        l_y = float(getattr(l_sh, "y", None) if hasattr(l_sh, "y") else l_sh[1])
+        l_z = float(getattr(l_sh, "z", None) if hasattr(l_sh, "z") else l_sh[2])
+
+        r_x = float(getattr(r_sh, "x", None) if hasattr(r_sh, "x") else r_sh[0])
+        r_y = float(getattr(r_sh, "y", None) if hasattr(r_sh, "y") else r_sh[1])
+        r_z = float(getattr(r_sh, "z", None) if hasattr(r_sh, "z") else r_sh[2])
+
+        nose_y = float(getattr(nose, "y", None) if hasattr(nose, "y") else nose[1])
+
+        sh_mid_y = (l_y + r_y) / 2.0
+        dy = sh_mid_y - nose_y
+
+        w_3d = float(np.sqrt((l_x - r_x) ** 2 + (l_y - r_y) ** 2 + (l_z - r_z) ** 2))
+        if w_3d < 1e-4:
+            return None
+        return float(dy / w_3d)
+    except (IndexError, TypeError, KeyError):
+        return None
+
+
 @dataclass
 class FeatureSnapshot:
     """Typed immutable snapshot of extracted numerical telemetry and condition states."""
@@ -227,9 +261,11 @@ class FeatureSnapshot:
     right_hand_cheek_distance: Optional[float] = None
     hand_cheek_distance: Optional[float] = None
 
-    # Posture depth
+    # Posture depth & geometry
     shoulder_z: Optional[float] = None
     shoulder_z_delta: Optional[float] = None
+    torso_aspect_ratio: Optional[float] = None
+    torso_posture_delta: Optional[float] = None
 
     # Dynamic rates of change
     head_yaw_rate: Optional[float] = None
@@ -329,6 +365,7 @@ def extract_features_from_landmarks(
     left_ear = right_ear = ear = mar = None
     left_cheek_dist = right_cheek_dist = hand_cheek_dist = None
     shoulder_z = None
+    torso_aspect_ratio = None
 
     if face_present and face_landmarks is not None:
         landmarks = face_landmarks
@@ -345,8 +382,9 @@ def extract_features_from_landmarks(
 
     if pose_present and pose_landmarks is not None:
         shoulder_z = compute_shoulder_z(pose_landmarks)
+        torso_aspect_ratio = compute_torso_aspect_ratio(pose_landmarks)
 
-    yaw_delta = pitch_delta = roll_delta = shoulder_delta = None
+    yaw_delta = pitch_delta = roll_delta = shoulder_delta = torso_delta = None
     if baseline is not None:
         yaw_delta = (
             yaw - baseline.head_yaw
@@ -368,6 +406,14 @@ def extract_features_from_landmarks(
             if shoulder_z is not None and baseline.shoulder_z is not None
             else None
         )
+        if (
+            torso_aspect_ratio is not None
+            and getattr(baseline, "torso_aspect_ratio", None) is not None
+            and abs(baseline.torso_aspect_ratio) > 1e-4
+        ):
+            torso_delta = (
+                torso_aspect_ratio - baseline.torso_aspect_ratio
+            ) / baseline.torso_aspect_ratio
 
     snapshot = FeatureSnapshot(
         timestamp=now,
@@ -389,6 +435,8 @@ def extract_features_from_landmarks(
         hand_cheek_distance=finite_or_none(hand_cheek_dist),
         shoulder_z=finite_or_none(shoulder_z),
         shoulder_z_delta=finite_or_none(shoulder_delta),
+        torso_aspect_ratio=finite_or_none(torso_aspect_ratio),
+        torso_posture_delta=finite_or_none(torso_delta),
     )
 
     compute_motion_rates(snapshot, previous_snapshot)

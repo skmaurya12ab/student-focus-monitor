@@ -5,6 +5,8 @@ import pytest
 from app.detection.calibration import CalibrationBaseline
 from app.detection.features import (
     FeatureSnapshot,
+    LEFT_CHEEK_IDX,
+    RIGHT_CHEEK_IDX,
     compute_hand_cheek_distances,
     compute_head_pose,
     compute_motion_rates,
@@ -125,6 +127,73 @@ def test_compute_shoulder_z():
     }
     z = compute_shoulder_z(pose)
     assert z == pytest.approx(-0.05)
+
+
+def test_compute_torso_aspect_ratio_scale_invariance_and_recline():
+    from app.detection.features import compute_torso_aspect_ratio
+
+    # Upright pose: nose at (0.50, 0.30, 0.0), shoulders at (0.35, 0.60, 0.0) & (0.65, 0.60, 0.0)
+    # vertical dy = 0.60 - 0.30 = 0.30; shoulder width = 0.30; ratio = 1.0
+    pose_upright = {
+        0: MockLandmark(0.50, 0.30, 0.0),
+        11: MockLandmark(0.35, 0.60, 0.0),
+        12: MockLandmark(0.65, 0.60, 0.0),
+    }
+    r_upright = compute_torso_aspect_ratio(pose_upright)
+    assert r_upright == pytest.approx(1.0, abs=1e-4)
+
+    # Scale 0.70x (simulating moving chair backward or moving farther from camera)
+    # Centered around (0.50, 0.50)
+    def scale_pose(pose, s):
+        res = {}
+        for k, lm in pose.items():
+            res[k] = MockLandmark(0.50 + (lm.x - 0.50) * s, 0.50 + (lm.y - 0.50) * s, lm.z * s)
+        return res
+
+    pose_farther = scale_pose(pose_upright, 0.70)
+    r_farther = compute_torso_aspect_ratio(pose_farther)
+    # Dimensionless ratio MUST be identical despite distance change!
+    assert r_farther == pytest.approx(1.0, abs=1e-4)
+
+    pose_closer = scale_pose(pose_upright, 1.40)
+    r_closer = compute_torso_aspect_ratio(pose_closer)
+    assert r_closer == pytest.approx(1.0, abs=1e-4)
+
+    # Actual recline / posture change: torso leans back (e.g. shoulders move down to y=0.72)
+    pose_reclined = {
+        0: MockLandmark(0.50, 0.30, -0.20),
+        11: MockLandmark(0.38, 0.72, 0.10),
+        12: MockLandmark(0.62, 0.72, 0.10),
+    }
+    r_reclined = compute_torso_aspect_ratio(pose_reclined)
+    # Shoulders shifted from ratio 1.0 to > 1.35 (substantial posture deformation)
+    assert abs(r_reclined - r_upright) / r_upright > 0.25
+
+
+def test_phone_use_false_positives_and_proximity():
+    face = {
+        LEFT_CHEEK_IDX: MockLandmark(0.30, 0.40),
+        RIGHT_CHEEK_IDX: MockLandmark(0.70, 0.40),
+    }
+    # 1. Hands on desk (far away)
+    hand_desk = [[MockLandmark(0.50, 0.90)]]
+    _, _, d_desk = compute_hand_cheek_distances(face, hand_desk)
+    assert d_desk > 0.40
+
+    # 2. Hand hovering far to the side
+    hand_hover = [[MockLandmark(0.10, 0.40)]]
+    _, _, d_hover = compute_hand_cheek_distances(face, hand_hover)
+    assert d_hover > 0.15
+
+    # 3. Phone held at chest level
+    hand_chest = [[MockLandmark(0.50, 0.70)]]
+    _, _, d_chest = compute_hand_cheek_distances(face, hand_chest)
+    assert d_chest > 0.25
+
+    # 4. Phone held directly to left cheek
+    hand_ear = [[MockLandmark(0.32, 0.41)]]
+    _, _, d_ear = compute_hand_cheek_distances(face, hand_ear)
+    assert d_ear < 0.05
 
 
 def test_compute_motion_rates():

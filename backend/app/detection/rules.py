@@ -77,11 +77,15 @@ def is_drowsy(features: FeatureSnapshot, config: DetectorConfig) -> bool:
 def is_leaning_back(features: FeatureSnapshot, config: DetectorConfig) -> bool:
     """
     Leaning Back condition:
-    Evaluates whether the student's pose is present and their shoulder depth z-deviation
-    from their calibrated baseline exceeds the configured threshold.
+    Evaluates whether the student's pose is present and their body posture
+    geometry deviation from calibrated baseline exceeds the configured threshold.
+    Prefers scale- and camera-distance invariant torso_posture_delta, falling
+    back to shoulder_z_delta when torso geometry is not available.
     """
     if not features.pose_present:
         return False
+    if features.torso_posture_delta is not None:
+        return abs(features.torso_posture_delta) > config.lean_back_z_delta
     if features.shoulder_z_delta is None:
         return False
     return abs(features.shoulder_z_delta) > config.lean_back_z_delta

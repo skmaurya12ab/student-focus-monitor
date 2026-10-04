@@ -17,6 +17,7 @@ class CalibrationBaseline:
     head_yaw: Optional[float] = None
     head_pitch: Optional[float] = None
     head_roll: Optional[float] = None
+    torso_aspect_ratio: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -26,9 +27,9 @@ class CalibrationBuffer:
     """
     Collects natural baseline samples at session start to personalize thresholds.
 
-    Calibration computes user-specific median baselines for shoulder depth
-    and head orientation, ensuring detection rules evaluate relative deviations
-    rather than brittle absolute measurements.
+    Calibration computes user-specific median baselines for shoulder depth,
+    torso aspect ratio, and head orientation, ensuring detection rules evaluate
+    relative deviations rather than brittle absolute measurements.
     """
 
     def __init__(
@@ -43,6 +44,7 @@ class CalibrationBuffer:
         self.head_yaw: deque[float] = deque(maxlen=500)
         self.head_pitch: deque[float] = deque(maxlen=500)
         self.head_roll: deque[float] = deque(maxlen=500)
+        self.torso_aspect_ratio: deque[float] = deque(maxlen=500)
         self.complete: bool = False
         self.baseline: CalibrationBaseline = CalibrationBaseline()
 
@@ -58,6 +60,7 @@ class CalibrationBuffer:
         self.head_yaw.clear()
         self.head_pitch.clear()
         self.head_roll.clear()
+        self.torso_aspect_ratio.clear()
         self.complete = False
         self.baseline = CalibrationBaseline()
 
@@ -68,6 +71,7 @@ class CalibrationBuffer:
         head_yaw: Optional[float],
         head_pitch: Optional[float],
         head_roll: Optional[float],
+        torso_aspect_ratio: Optional[float] = None,
         required_seconds: Optional[float] = None,
         min_samples: Optional[int] = None,
     ) -> bool:
@@ -92,12 +96,20 @@ class CalibrationBuffer:
         if head_roll is not None and np.isfinite(head_roll):
             self.head_roll.append(float(head_roll))
 
+        if torso_aspect_ratio is not None and np.isfinite(torso_aspect_ratio):
+            self.torso_aspect_ratio.append(float(torso_aspect_ratio))
+
         elapsed = now - (self.started_at or now)
 
         if elapsed >= req_sec and len(self.head_yaw) >= min_samp:
             shoulder_baseline = (
                 float(np.median(self.shoulder_z))
                 if len(self.shoulder_z) > 0
+                else None
+            )
+            torso_baseline = (
+                float(np.median(self.torso_aspect_ratio))
+                if len(self.torso_aspect_ratio) > 0
                 else None
             )
             self.baseline = CalibrationBaseline(
@@ -109,6 +121,7 @@ class CalibrationBuffer:
                 head_roll=float(np.median(self.head_roll))
                 if self.head_roll
                 else None,
+                torso_aspect_ratio=torso_baseline,
             )
             self.complete = True
 
@@ -150,3 +163,24 @@ class CalibrationBuffer:
         )
 
         return yaw_delta, pitch_delta, roll_delta, shoulder_delta
+
+    def compute_posture_delta(
+        self,
+        torso_aspect_ratio: Optional[float],
+    ) -> Optional[float]:
+        """
+        Calculate relative posture deviation from calibrated baseline torso aspect ratio.
+        Returns relative fraction delta or None.
+        """
+        if not self.complete:
+            return None
+        if (
+            torso_aspect_ratio is not None
+            and self.baseline.torso_aspect_ratio is not None
+            and abs(self.baseline.torso_aspect_ratio) > 1e-4
+        ):
+            return float(
+                (torso_aspect_ratio - self.baseline.torso_aspect_ratio)
+                / self.baseline.torso_aspect_ratio
+            )
+        return None
