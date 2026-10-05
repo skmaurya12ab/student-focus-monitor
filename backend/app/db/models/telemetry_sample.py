@@ -45,7 +45,7 @@ class TelemetrySample(Base, UUIDPrimaryKeyMixin):
     )
     frame_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     detector_version: Mapped[str] = mapped_column(String(20), default="v4", nullable=False)
-    feature_schema_version: Mapped[str] = mapped_column(String(30), default="telemetry_v1", nullable=False)
+    feature_schema_version: Mapped[str] = mapped_column(String(30), default="telemetry_v2", nullable=False)
 
     # Core explicit numerical features
     head_pitch: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

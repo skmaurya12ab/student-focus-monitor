@@ -25,6 +25,7 @@ from app.detection.events import DetectionEvent
 from app.detection.features import FeatureSnapshot
 from app.detection.session_state import SessionState
 from app.detection.telemetry import (
+    BufferedTelemetrySink,
     FileTelemetrySink,
     InMemoryTelemetrySink,
     TelemetrySink,
@@ -46,6 +47,7 @@ __all__ = [
     "CATEGORY_LOOKING_AWAY",
     "CATEGORY_PHONE_USE",
     "CATEGORY_YAWNING",
+    "BufferedTelemetrySink",
     "CalibrationBaseline",
     "CalibrationBuffer",
     "DETECTOR_VERSION",

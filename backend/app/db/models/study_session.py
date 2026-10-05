@@ -83,7 +83,7 @@ class StudySession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     # Detector & feature schema versions
     detector_version: Mapped[str] = mapped_column(String(20), default="v4", nullable=False)
-    feature_schema_version: Mapped[str] = mapped_column(String(30), default="telemetry_v1", nullable=False)
+    feature_schema_version: Mapped[str] = mapped_column(String(30), default="telemetry_v2", nullable=False)
 
     # Structured personal calibration baseline snapshot
     calibration_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)

@@ -1446,6 +1446,243 @@ html, body {
   color: var(--text-primary);
 }
 
+.sfm-event-feedback-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+.sfm-feedback-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: #FFFFFF;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sfm-feedback-btn:hover:not(:disabled) {
+  border-color: #CBD5E1;
+  color: var(--text-primary);
+}
+
+.sfm-feedback-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sfm-btn-correct:hover:not(:disabled) {
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+  color: #047857;
+}
+
+.sfm-btn-false-positive:hover:not(:disabled) {
+  background: #FFF1F2;
+  border-color: #FECDD3;
+  color: #BE123C;
+}
+
+.sfm-feedback-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.sfm-badge-correct {
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+.sfm-badge-false-positive {
+  background: #FFF1F2;
+  color: #BE123C;
+  border: 1px solid #FECDD3;
+}
+
+.sfm-badge-other {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.sfm-feedback-btn-subtle {
+  background: none;
+  border: none;
+  color: #94A3B8;
+  font-size: 10px;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.sfm-feedback-btn-subtle:hover {
+  color: var(--text-primary);
+}
+
+/* Session-level Feedback Section */
+.sfm-session-feedback-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sfm-feedback-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.sfm-feedback-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sfm-btn-toggle-feedback {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background: #F8FAFC;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sfm-btn-toggle-feedback:hover {
+  background: #F1F5F9;
+}
+
+.sfm-feedback-card {
+  background: #F8FAFC;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.sfm-feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sfm-feedback-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sfm-feedback-select {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: #FFFFFF;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 140px;
+}
+
+.sfm-feedback-input {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: #FFFFFF;
+  color: var(--text-primary);
+  flex: 2;
+  min-width: 200px;
+}
+
+.sfm-feedback-submit-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: #4F46E5;
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.sfm-feedback-submit-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.sfm-feedback-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sfm-feedback-alert {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.sfm-feedback-alert-success {
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+.sfm-feedback-alert-error {
+  background: #FEF2F2;
+  color: #991B1B;
+  border: 1px solid #FECACA;
+}
+
+.sfm-missed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sfm-missed-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.sfm-missed-badge {
+  font-weight: 600;
+  color: #6366F1;
+}
+
+.sfm-missed-note {
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-left: 8px;
+}
+
+.sfm-missed-time {
+  color: #94A3B8;
+  font-size: 11px;
+}
+
 /* Empty / Loading States */
 .sfm-empty-state-box {
   display: flex;

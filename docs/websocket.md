@@ -285,4 +285,24 @@ In Phase 9, the frontend Home dashboard consumes live WebSocket payloads and man
    - A brand new session begins with a clean, short initial timeline (no fabricated historical data).
    - Segments scale proportionally to actual recorded durations.
 
+---
+
+## 9. Phase 11 Telemetry Transport & Flush Lifecycle
+
+In Phase 11, the authoritative backend detection pipeline collects numerical and structured feature snapshots during live monitoring:
+
+1. **Cadence & Transport Independence**:
+   - Camera frames sent over WebSocket (~5 FPS) are evaluated by MediaPipe and the detector.
+   - Telemetry samples are emitted to a thread-safe `BufferedTelemetrySink` at a deliberate 5 Hz target interval (`telemetry_interval_sec = 0.2`).
+   - Telemetry capture does not block frame transport or visual inference.
+
+2. **Bounded Queue & Backpressure**:
+   - `BufferedTelemetrySink` enforces a strict memory bound (`maxsize = 500`).
+   - Under heavy database latency, oldest samples are evicted rather than allowing unbounded memory growth.
+
+3. **Guaranteed Flush on Clean Disconnect**:
+   - In `backend/app/api/websocket.py`, the `finally` block of the WebSocket handler awaits `active_rt.flush_telemetry()`.
+   - Any buffered telemetry samples in memory are immediately persisted to PostgreSQL before the session runtime closes.
+
+
 

@@ -1,11 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { StudySession, StudySessionDetail } from '../../types/session';
-import { fetchSessionHistory, fetchSessionDetail } from '../../services/sessionApi';
+import { StudySession, StudySessionDetail, FeedbackType } from '../../types/session';
+import { fetchSessionHistory, fetchSessionDetail, submitSessionFeedback } from '../../services/sessionApi';
 import {
   SearchIcon,
   ChevronDownIcon,
   ExportCloverIcon,
 } from '../../components/common/Icons';
+
+const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  looking_away: 'Looking Away',
+  phone_use: 'Phone Use',
+  yawning: 'Yawning',
+  drowsy: 'Drowsiness',
+  leaning_back: 'Bad Posture',
+  away_from_desk: 'Away From Seat',
+};
+
+function formatCategory(cat: string | null | undefined): string {
+  if (!cat) return 'Distraction';
+  return CATEGORY_DISPLAY_NAMES[cat] || cat.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+}
 
 export interface SessionsPageProps {
   initialSessions?: StudySession[];
@@ -71,6 +85,124 @@ export const SessionsPage: React.FC<SessionsPageProps> = ({
   );
   const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false);
 
+  // Feedback states
+  const [submittingEventId, setSubmittingEventId] = useState<string | null>(null);
+  const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+  const [showMissedForm, setShowMissedForm] = useState<boolean>(false);
+  const [missedCategory, setMissedCategory] = useState<string>('phone_use');
+  const [missedNote, setMissedNote] = useState<string>('');
+  const [isSubmittingMissed, setIsSubmittingMissed] = useState<boolean>(false);
+
+  const [showOtherForm, setShowOtherForm] = useState<boolean>(false);
+  const [otherNote, setOtherNote] = useState<string>('');
+  const [isSubmittingOther, setIsSubmittingOther] = useState<boolean>(false);
+
+  const handleEventFeedback = async (eventId: string, type: FeedbackType) => {
+    if (!selectedSessionId || submittingEventId) return;
+    setSubmittingEventId(eventId);
+    setFeedbackError(null);
+    setFeedbackSuccess(null);
+    try {
+      const fb = await submitSessionFeedback(selectedSessionId, {
+        detectionEventId: eventId,
+        feedbackType: type,
+      });
+      setFeedbackSuccess('Feedback recorded.');
+      setSelectedDetail((prev) => {
+        if (!prev) return prev;
+        const updatedEvents = prev.events.map((e) =>
+          e.id === eventId ? { ...e, feedback: fb } : e
+        );
+        const existingIdx = (prev.feedbacks || []).findIndex(
+          (f) => f.detectionEventId === eventId
+        );
+        const updatedFeedbacks = [...(prev.feedbacks || [])];
+        if (existingIdx >= 0) {
+          updatedFeedbacks[existingIdx] = fb;
+        } else {
+          updatedFeedbacks.push(fb);
+        }
+        return {
+          ...prev,
+          events: updatedEvents,
+          feedbacks: updatedFeedbacks,
+        };
+      });
+    } catch (err: any) {
+      setFeedbackError(err.message || 'Failed to submit feedback.');
+    } finally {
+      setSubmittingEventId(null);
+    }
+  };
+
+  const handleSubmitMissedDetection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSessionId || isSubmittingMissed) return;
+    setIsSubmittingMissed(true);
+    setFeedbackError(null);
+    setFeedbackSuccess(null);
+    try {
+      const fb = await submitSessionFeedback(selectedSessionId, {
+        feedbackType: 'missed_detection',
+        category: missedCategory,
+        note: missedNote.trim() || undefined,
+      });
+      setFeedbackSuccess(`Missed distraction recorded: ${formatCategory(missedCategory)}.`);
+      setMissedNote('');
+      setShowMissedForm(false);
+      setSelectedDetail((prev) => {
+        if (!prev) return prev;
+        const existingIdx = (prev.feedbacks || []).findIndex(
+          (f) => f.feedbackType === 'missed_detection' && f.category === fb.category
+        );
+        const updatedFeedbacks = [...(prev.feedbacks || [])];
+        if (existingIdx >= 0) {
+          updatedFeedbacks[existingIdx] = fb;
+        } else {
+          updatedFeedbacks.push(fb);
+        }
+        return {
+          ...prev,
+          feedbacks: updatedFeedbacks,
+        };
+      });
+    } catch (err: any) {
+      setFeedbackError(err.message || 'Failed to submit missed distraction report.');
+    } finally {
+      setIsSubmittingMissed(false);
+    }
+  };
+
+  const handleSubmitOther = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSessionId || isSubmittingOther || !otherNote.trim()) return;
+    setIsSubmittingOther(true);
+    setFeedbackError(null);
+    setFeedbackSuccess(null);
+    try {
+      const fb = await submitSessionFeedback(selectedSessionId, {
+        feedbackType: 'other',
+        note: otherNote.trim(),
+      });
+      setFeedbackSuccess('Session feedback note recorded.');
+      setOtherNote('');
+      setShowOtherForm(false);
+      setSelectedDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          feedbacks: [...(prev.feedbacks || []), fb],
+        };
+      });
+    } catch (err: any) {
+      setFeedbackError(err.message || 'Failed to submit feedback note.');
+    } finally {
+      setIsSubmittingOther(false);
+    }
+  };
+
   // Load paginated sessions
   const loadSessions = useCallback(async (pageNum: number) => {
     setIsLoading(true);
@@ -124,6 +256,7 @@ export const SessionsPage: React.FC<SessionsPageProps> = ({
             setSelectedDetail({
               ...basic,
               events: [],
+              feedbacks: [],
               topCauses: 'No distractions recorded',
               categoryBreakdown: [],
             });
@@ -405,24 +538,237 @@ export const SessionsPage: React.FC<SessionsPageProps> = ({
               ) : (
                 <div className="sfm-events-list">
                   {selectedDetail.events.map((evt) => (
-                    <div key={evt.id} className="sfm-event-item">
-                      <span className="sfm-event-cat-badge">
-                        <span className="sfm-event-dot" />
-                        {evt.eventType.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                      </span>
-                      <span className="sfm-event-times">
-                        {formatTime(evt.startedAt)}
-                        {evt.endedAt ? ` — ${formatTime(evt.endedAt)}` : ' (ongoing)'}
-                      </span>
-                      <span className="sfm-event-duration">
-                        {evt.durationSeconds !== null
-                          ? formatDuration(evt.durationSeconds)
-                          : '—'}
-                      </span>
+                    <div key={evt.id} className="sfm-event-item" id={`event-item-${evt.id}`}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span className="sfm-event-cat-badge">
+                          <span className="sfm-event-dot" />
+                          {formatCategory(evt.eventType)}
+                        </span>
+                        <span className="sfm-event-times">
+                          {formatTime(evt.startedAt)}
+                          {evt.endedAt ? ` — ${formatTime(evt.endedAt)}` : ' (ongoing)'}
+                        </span>
+                        <span className="sfm-event-duration">
+                          {evt.durationSeconds !== null
+                            ? formatDuration(evt.durationSeconds)
+                            : '—'}
+                        </span>
+                      </div>
+
+                      {/* Event Feedback Controls */}
+                      <div className="sfm-event-feedback-controls">
+                        {evt.feedback ? (
+                          <>
+                            {evt.feedback.feedbackType === 'correct_detection' && (
+                              <span
+                                className="sfm-feedback-badge sfm-badge-correct"
+                                id={`feedback-status-${evt.id}`}
+                              >
+                                ✓ Correct
+                              </span>
+                            )}
+                            {evt.feedback.feedbackType === 'false_positive' && (
+                              <span
+                                className="sfm-feedback-badge sfm-badge-false-positive"
+                                id={`feedback-status-${evt.id}`}
+                              >
+                                ✗ False Positive
+                              </span>
+                            )}
+                            {evt.feedback.feedbackType === 'other' && (
+                              <span
+                                className="sfm-feedback-badge sfm-badge-other"
+                                id={`feedback-status-${evt.id}`}
+                              >
+                                💬 Note
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="sfm-feedback-btn-subtle"
+                              id={`btn-edit-feedback-${evt.id}`}
+                              disabled={submittingEventId === evt.id}
+                              onClick={() => {
+                                const newType =
+                                  evt.feedback?.feedbackType === 'correct_detection'
+                                    ? 'false_positive'
+                                    : 'correct_detection';
+                                handleEventFeedback(evt.id, newType);
+                              }}
+                              title="Switch feedback classification"
+                            >
+                              Change
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="sfm-feedback-btn sfm-btn-correct"
+                              id={`btn-feedback-correct-${evt.id}`}
+                              disabled={submittingEventId === evt.id}
+                              onClick={() => handleEventFeedback(evt.id, 'correct_detection')}
+                            >
+                              {submittingEventId === evt.id ? 'Saving...' : 'Correct'}
+                            </button>
+                            <button
+                              type="button"
+                              className="sfm-feedback-btn sfm-btn-false-positive"
+                              id={`btn-feedback-fp-${evt.id}`}
+                              disabled={submittingEventId === evt.id}
+                              onClick={() => handleEventFeedback(evt.id, 'false_positive')}
+                            >
+                              {submittingEventId === evt.id ? 'Saving...' : 'False positive'}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Session Feedback & Missed Detections Section */}
+            <div className="sfm-session-feedback-section" id="session-feedback-section">
+              <div className="sfm-feedback-header-row">
+                <h4 className="sfm-feedback-section-title">Session Accuracy & Feedback</h4>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="sfm-btn-toggle-feedback"
+                    id="btn-toggle-missed-detection"
+                    onClick={() => {
+                      setShowMissedForm(!showMissedForm);
+                      setShowOtherForm(false);
+                    }}
+                  >
+                    {showMissedForm ? 'Cancel' : 'Did we miss a distraction?'}
+                  </button>
+                  <button
+                    type="button"
+                    className="sfm-btn-toggle-feedback"
+                    id="btn-toggle-other-feedback"
+                    onClick={() => {
+                      setShowOtherForm(!showOtherForm);
+                      setShowMissedForm(false);
+                    }}
+                  >
+                    {showOtherForm ? 'Cancel' : 'General note'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Status notifications */}
+              {feedbackSuccess && (
+                <div className="sfm-feedback-alert sfm-feedback-alert-success" id="feedback-success-msg">
+                  {feedbackSuccess}
+                </div>
+              )}
+              {feedbackError && (
+                <div className="sfm-feedback-alert sfm-feedback-alert-error" id="feedback-error-msg">
+                  {feedbackError}
+                </div>
+              )}
+
+              {/* Missed Detection Form */}
+              {showMissedForm && (
+                <form
+                  className="sfm-feedback-card sfm-feedback-form"
+                  id="form-missed-detection"
+                  onSubmit={handleSubmitMissedDetection}
+                >
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Report Missed Distraction</label>
+                  <div className="sfm-feedback-row">
+                    <select
+                      className="sfm-feedback-select"
+                      id="select-missed-category"
+                      value={missedCategory}
+                      onChange={(e) => setMissedCategory(e.target.value)}
+                    >
+                      <option value="phone_use">Phone Use</option>
+                      <option value="looking_away">Looking Away</option>
+                      <option value="yawning">Yawning</option>
+                      <option value="drowsy">Drowsiness</option>
+                      <option value="leaning_back">Bad Posture</option>
+                      <option value="away_from_desk">Away From Seat</option>
+                    </select>
+                    <input
+                      type="text"
+                      className="sfm-feedback-input"
+                      id="input-missed-note"
+                      placeholder="Optional note (e.g. Looked at phone at 15m)"
+                      maxLength={1000}
+                      value={missedNote}
+                      onChange={(e) => setMissedNote(e.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      className="sfm-feedback-submit-btn"
+                      id="btn-submit-missed"
+                      disabled={isSubmittingMissed}
+                    >
+                      {isSubmittingMissed ? 'Submitting...' : 'Record Missed'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Other Feedback Form */}
+              {showOtherForm && (
+                <form
+                  className="sfm-feedback-card sfm-feedback-form"
+                  id="form-other-feedback"
+                  onSubmit={handleSubmitOther}
+                >
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Session Feedback Note</label>
+                  <div className="sfm-feedback-row">
+                    <input
+                      type="text"
+                      className="sfm-feedback-input"
+                      id="input-other-note"
+                      placeholder="Optional note on lighting, seating, or detector accuracy..."
+                      maxLength={1000}
+                      value={otherNote}
+                      onChange={(e) => setOtherNote(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="sfm-feedback-submit-btn"
+                      id="btn-submit-other"
+                      disabled={isSubmittingOther || !otherNote.trim()}
+                    >
+                      {isSubmittingOther ? 'Submitting...' : 'Submit Note'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* List of previously submitted missed detections & other session notes */}
+              {selectedDetail &&
+                selectedDetail.feedbacks &&
+                selectedDetail.feedbacks.some((f) => !f.detectionEventId) && (
+                  <div className="sfm-missed-list" id="session-feedback-list">
+                    {selectedDetail.feedbacks
+                      .filter((f) => !f.detectionEventId)
+                      .map((f) => (
+                        <div key={f.id} className="sfm-missed-item" id={`feedback-item-${f.id}`}>
+                          <div>
+                            {f.feedbackType === 'missed_detection' ? (
+                              <span className="sfm-missed-badge">
+                                Missed: {formatCategory(f.category)}
+                              </span>
+                            ) : (
+                              <span className="sfm-feedback-badge sfm-badge-other">Session Note</span>
+                            )}
+                            {f.note && <span className="sfm-missed-note">"{f.note}"</span>}
+                          </div>
+                          <span className="sfm-missed-time">{formatTime(f.createdAt)}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
             </div>
           </section>
         )}

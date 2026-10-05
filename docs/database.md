@@ -273,20 +273,22 @@ Stores high-frequency numerical telemetry points extracted during monitoring for
   - `ix_telemetry_samples_session_sampled` composite index on (`session_id`, `sampled_at` ASC) for streaming retrieval
 
 ### 3.7. `session_feedback`
-Prepares the data model for human feedback and alert labeling workflows (Phase 11).
+Stores explicit human feedback and alert labeling workflows (Phase 11).
 - **Primary Key**: `id` UUID
 - **Foreign Keys**:
   - `session_id` -> `study_sessions.id` (`ON DELETE CASCADE`)
   - `detection_event_id` -> `detection_events.id` (`ON DELETE SET NULL`, nullable)
 - **Columns**:
   - `feedback_type` `VARCHAR(50)` — `correct_detection`, `false_positive`, `missed_detection`, or `other`
-  - `note` `TEXT` (nullable)
+  - `category` `VARCHAR(50)` — Canonical category (e.g. `phone_use`, `looking_away`, `yawning`, `drowsy`, `leaning_back`, `away_from_desk`) for missed detections. Added in migration `d8b5c2a1e3f4`.
+  - `note` `TEXT` (nullable, bounded to 1000 characters)
   - `created_at` `TIMESTAMPTZ`
 - **Constraints**:
   - `ck_session_feedback_type`: `feedback_type IN ('correct_detection', 'false_positive', 'missed_detection', 'other')`
-- **Indexes**:
+- **Indexes & Unique Constraints**:
   - `ix_session_feedback_session_id` on (`session_id`)
   - `ix_session_feedback_event_id` on (`detection_event_id`)
+  - `uq_session_feedback_session_event` **UNIQUE partial index** on (`session_id`, `detection_event_id`) `WHERE detection_event_id IS NOT NULL`. Added in migration `d8b5c2a1e3f4`.
 
 ---
 
@@ -295,11 +297,11 @@ Prepares the data model for human feedback and alert labeling workflows (Phase 1
 ### 4.1. Structured Hybrid Design
 To balance fast analytical queries against future ML schema evolution, `telemetry_samples` employs a hybrid design:
 1. **Fast-path columns**: Core scalar coordinates (`head_pitch`, `head_yaw`, `head_roll`, `ear`, `mar`, `min_hand_cheek_distance`, `shoulder_z`, presence flags) are stored in typed PostgreSQL columns.
-2. **JSONB payload (`features`)**: Evolving derived metrics (e.g. `head_pitch_rate`, `shoulder_z_rate`, baseline-adjusted angles, tracking confidence, rule state vectors) are stored in JSONB without requiring database schema migrations for new ML features.
+2. **JSONB payload (`features`)**: Evolving derived metrics (`head_yaw_from_baseline`, `head_pitch_from_baseline`, `head_roll_from_baseline`, `shoulder_z_delta`, `torso_aspect_ratio`, `torso_posture_delta`, `head_yaw_rate`, `head_pitch_rate`, `shoulder_z_rate`, `tracker_states`, `calibration_state`, `baseline`) are stored in JSONB without requiring database schema migrations for new ML features. Versioned deliberately under `FEATURE_SCHEMA_VERSION = "telemetry_v2"`.
 
 ### 4.2. Privacy Guarantees
 - **No media storage**: Neither `telemetry_samples` nor any other table in the database contains fields for raw images, image bytes, video files, audio files, or camera frame buffers.
-- **Automated enforcement**: The test suite includes `backend/tests/db/test_privacy.py`, which introspects the SQLAlchemy metadata and live PostgreSQL tables to guarantee that no prohibited media columns exist.
+- **Automated enforcement**: The test suite includes `backend/tests/db/test_privacy.py` and `backend/tests/detection/test_telemetry_numerical_correctness.py`, which introspect the SQLAlchemy metadata and live PostgreSQL tables to guarantee that no prohibited media columns exist.
 
 ---
 
@@ -307,14 +309,16 @@ To balance fast analytical queries against future ML schema evolution, `telemetr
 
 Alembic manages all database migrations deterministically.
 
-### 5.1. Directory Structure
+### 5.1. Directory Structure & Migration History
 ```
 backend/
 ├── alembic/
 │   ├── env.py                  # Loads Base.metadata and configures sync PostgreSQL engine
 │   ├── script.py.mako          # Migration template
 │   └── versions/
-│       └── b30bb576b11d_initial_schema.py  # Phase 4 initial schema migration
+│       ├── b30bb576b11d_initial_schema.py  # Phase 4: Initial tables, constraints, indexes
+│       ├── 621aa6c6d813_add_unique_partial_index_on_active_study_session.py  # Phase 6: Active session uniqueness
+│       └── d8b5c2a1e3f4_add_session_feedback_category_and_unique_event.py   # Phase 11: category column & partial unique index
 ├── alembic.ini                 # Alembic configuration
 ```
 

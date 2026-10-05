@@ -43,14 +43,14 @@ The project consists of **15 total phases** (Phase 0 through Phase 14):
 - **Phase 10 — Session history and analytics (Completed)**
   - Convert Sessions and Analytics pages from static presentation into real historical functionality backed by PostgreSQL. Implements bounded server-side pagination, newest-first deterministic ordering, detailed session inspection with discrete `DetectionEvent`s and top causes, and aggregate analytics with date filtering (`7d`, `30d`, `all`), IANA timezone-aware date bucketing, dynamic trend lines, canonical category breakdowns, and IDOR protection. Zero mock analytics leak into production UI.
 
-- **Phase 11 — Telemetry and user feedback**
-  - Anonymize numerical movement telemetry and capture user feedback on distraction alerts (true positives vs. false positives).
+- **Phase 11 — Telemetry and user feedback (Completed)**
+  - Capture trustworthy numerical and structured movement telemetry from authoritative backend detection runtime into PostgreSQL (`telemetry_samples`), capturing raw metrics, baseline-relative deltas, motion rates, tracker states, and calibration metadata under feature schema `telemetry_v2`. Provides voluntary, lightweight human labeling via Session Detail UI (`correct_detection`, `false_positive`, `missed_detection` with structured canonical category, `other`). Bounded queue buffering (`maxsize=500`, 5 Hz target cadence) and disconnect flushing preserve live detection performance. Strictly zero raw media.
 
-- **Phase 12 — ML dataset pipeline**
-  - Build automated extraction and preprocessing pipelines to curate training datasets from anonymized telemetry.
+- **Phase 12 — ML dataset pipeline (Future)**
+  - Build automated extraction and preprocessing pipelines to associate `telemetry_samples` with `detection_events` and `session_feedback` human labels to curate training datasets. Explicitly deferred to Phase 12; zero ML training or inference in Phase 11.
 
-- **Phase 13 — First ML model**
+- **Phase 13 — First ML model (Future)**
   - Train and evaluate the first machine learning model to classify student distraction from movement telemetry.
 
-- **Phase 14 — ML shadow mode**
+- **Phase 14 — ML shadow mode (Future)**
   - Deploy the ML model in shadow mode alongside the rule-based engine to compare inference accuracy before gradual rollout.

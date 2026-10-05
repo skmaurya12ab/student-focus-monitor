@@ -53,6 +53,31 @@ export interface StudySessionStopResponseRaw {
   session: StudySessionResponseRaw;
 }
 
+export type FeedbackType =
+  | 'correct_detection'
+  | 'false_positive'
+  | 'missed_detection'
+  | 'other';
+
+export interface SessionFeedback {
+  id: string;
+  sessionId: string;
+  detectionEventId: string | null;
+  feedbackType: FeedbackType;
+  category: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface SessionFeedbackCreatePayload {
+  detectionEventId?: string | null;
+  detection_event_id?: string | null;
+  feedbackType?: FeedbackType;
+  feedback_type?: FeedbackType;
+  category?: string | null;
+  note?: string | null;
+}
+
 export interface DetectionEventItem {
   id: string;
   sessionId: string;
@@ -63,6 +88,7 @@ export interface DetectionEventItem {
   detectorVersion: string;
   metadataJson: Record<string, any> | null;
   createdAt: string;
+  feedback?: SessionFeedback | null;
 }
 
 export interface SessionCategorySummaryItem {
@@ -74,6 +100,7 @@ export interface SessionCategorySummaryItem {
 
 export interface StudySessionDetail extends StudySession {
   events: DetectionEventItem[];
+  feedbacks?: SessionFeedback[];
   topCauses: string;
   categoryBreakdown: SessionCategorySummaryItem[];
 }

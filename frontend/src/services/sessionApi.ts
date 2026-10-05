@@ -13,7 +13,24 @@ import {
   DetectionEventItem,
 } from '../types/session';
 
+import {
+  SessionFeedback,
+  SessionFeedbackCreatePayload,
+} from '../types/session';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+function mapFeedback(raw: any): SessionFeedback {
+  return {
+    id: raw.id,
+    sessionId: raw.session_id,
+    detectionEventId: raw.detection_event_id,
+    feedbackType: raw.feedback_type,
+    category: raw.category,
+    note: raw.note,
+    createdAt: raw.created_at,
+  };
+}
 
 function mapEvent(raw: any): DetectionEventItem {
   return {
@@ -26,6 +43,7 @@ function mapEvent(raw: any): DetectionEventItem {
     detectorVersion: raw.detector_version,
     metadataJson: raw.metadata_json,
     createdAt: raw.created_at,
+    feedback: raw.feedback ? mapFeedback(raw.feedback) : null,
   };
 }
 
@@ -34,6 +52,7 @@ function mapDetail(raw: any): StudySessionDetail {
   return {
     ...base,
     events: (raw.events || []).map(mapEvent),
+    feedbacks: (raw.feedbacks || []).map(mapFeedback),
     topCauses: raw.top_causes || '',
     categoryBreakdown: (raw.category_breakdown || []).map((c: any) => ({
       category: c.category,
@@ -312,4 +331,86 @@ export async function fetchSessionDetail(sessionId: string): Promise<StudySessio
     throw err;
   }
 }
+
+/**
+ * Submit user feedback on a detection event or session-level accuracy.
+ */
+export async function submitSessionFeedback(
+  sessionId: string,
+  payload: SessionFeedbackCreatePayload
+): Promise<SessionFeedback> {
+  try {
+    const rawPayload = payload as any;
+    const body: Record<string, any> = {
+      detection_event_id: rawPayload.detectionEventId || rawPayload.detection_event_id || null,
+      feedback_type: rawPayload.feedbackType || rawPayload.feedback_type,
+      category: rawPayload.category || null,
+      note: rawPayload.note || null,
+    };
+
+    const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      const detail = errJson.detail || response.statusText;
+      if (response.status === 401) throw new Error('Not authenticated');
+      if (response.status === 404) throw new Error('Session or event not found');
+      throw new Error(detail || `Failed to submit feedback (${response.status})`);
+    }
+
+    const raw = await response.json();
+    return mapFeedback(raw);
+  } catch (err: any) {
+    if (
+      err.name === 'TypeError' ||
+      err.message?.includes('Failed to fetch') ||
+      err.message?.includes('NetworkError')
+    ) {
+      throw new Error('BACKEND_UNAVAILABLE');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Retrieve all feedback entries recorded for a session.
+ */
+export async function fetchSessionFeedbacks(
+  sessionId: string
+): Promise<SessionFeedback[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/feedback`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Not authenticated');
+      if (response.status === 404) throw new Error('Session not found');
+      throw new Error(`Failed to fetch feedback: ${response.statusText}`);
+    }
+
+    const raw = await response.json();
+    return (raw || []).map(mapFeedback);
+  } catch (err: any) {
+    if (
+      err.name === 'TypeError' ||
+      err.message?.includes('Failed to fetch') ||
+      err.message?.includes('NetworkError')
+    ) {
+      throw new Error('BACKEND_UNAVAILABLE');
+    }
+    throw err;
+  }
+}
+
 

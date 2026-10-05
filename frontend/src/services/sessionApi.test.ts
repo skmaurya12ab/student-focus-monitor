@@ -7,6 +7,8 @@ import {
   stopStudySession,
   fetchSessionHistory,
   fetchSessionDetail,
+  submitSessionFeedback,
+  fetchSessionFeedbacks,
 } from './sessionApi';
 
 describe('sessionApi client tests (HttpOnly cookie session architecture)', () => {
@@ -315,6 +317,103 @@ describe('sessionApi client tests (HttpOnly cookie session architecture)', () =>
     expect(detail.events[0].durationSeconds).toBe(120);
     expect(detail.categoryBreakdown.length).toBe(1);
     expect(detail.categoryBreakdown[0].label).toBe('Phone Use');
+  });
+
+  it('submits event feedback with credentials: include and maps response', async () => {
+    const mockFeedbackRaw = {
+      id: 'fb-uuid-1',
+      session_id: 's-fb-1',
+      detection_event_id: 'evt-1',
+      feedback_type: 'correct_detection',
+      category: null,
+      note: 'Verified phone checking',
+      created_at: '2026-10-04T10:20:00Z',
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockFeedbackRaw,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await submitSessionFeedback('s-fb-1', {
+      detectionEventId: 'evt-1',
+      feedbackType: 'correct_detection',
+      note: 'Verified phone checking',
+    });
+
+    expect(result.id).toBe('fb-uuid-1');
+    expect(result.sessionId).toBe('s-fb-1');
+    expect(result.detectionEventId).toBe('evt-1');
+    expect(result.feedbackType).toBe('correct_detection');
+    expect(result.note).toBe('Verified phone checking');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/sessions/s-fb-1/feedback'),
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+          detection_event_id: 'evt-1',
+          feedback_type: 'correct_detection',
+          category: null,
+          note: 'Verified phone checking',
+        }),
+      })
+    );
+  });
+
+  it('submits missed detection feedback with structured category', async () => {
+    const mockFeedbackRaw = {
+      id: 'fb-uuid-2',
+      session_id: 's-fb-1',
+      detection_event_id: null,
+      feedback_type: 'missed_detection',
+      category: 'phone_use',
+      note: 'Missed quick message check',
+      created_at: '2026-10-04T10:25:00Z',
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockFeedbackRaw,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await submitSessionFeedback('s-fb-1', {
+      feedbackType: 'missed_detection',
+      category: 'phone_use',
+      note: 'Missed quick message check',
+    });
+
+    expect(result.id).toBe('fb-uuid-2');
+    expect(result.feedbackType).toBe('missed_detection');
+    expect(result.category).toBe('phone_use');
+  });
+
+  it('fetches session feedbacks list', async () => {
+    const mockList = [
+      {
+        id: 'fb-1',
+        session_id: 's-1',
+        detection_event_id: 'evt-1',
+        feedback_type: 'correct_detection',
+        category: null,
+        note: null,
+        created_at: '2026-10-04T10:00:00Z',
+      },
+    ];
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockList,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const feedbacks = await fetchSessionFeedbacks('s-1');
+    expect(feedbacks.length).toBe(1);
+    expect(feedbacks[0].id).toBe('fb-1');
+    expect(feedbacks[0].feedbackType).toBe('correct_detection');
   });
 });
 

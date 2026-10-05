@@ -65,6 +65,7 @@ describe('SessionsPage component tests (Phase 10 Session History)', () => {
         createdAt: '2026-10-04T10:15:00Z',
       },
     ],
+    feedbacks: [],
   };
 
   it('renders loading state when initialSessions is not provided', () => {
@@ -120,5 +121,58 @@ describe('SessionsPage component tests (Phase 10 Session History)', () => {
     expect(html).toContain('Detected Distraction Events');
     expect(html).toContain('Phone Use');
     expect(html).toContain('3m 20s');
+
+    // Phase 11 Event Feedback buttons rendered
+    expect(html).toContain('Correct');
+    expect(html).toContain('False positive');
+
+    // Phase 11 Missed Detection and Session Feedback toggle buttons rendered
+    expect(html).toContain('Session Accuracy &amp; Feedback');
+    expect(html).toContain('Did we miss a distraction?');
+    expect(html).toContain('General note');
+  });
+
+  it('renders feedback badges and Change button when events have existing feedback', () => {
+    const detailWithFeedback: StudySessionDetail = {
+      ...mockDetail,
+      events: [
+        {
+          ...mockDetail.events[0],
+          feedback: {
+            id: 'fb-1',
+            sessionId: 'session-uuid-1',
+            detectionEventId: 'evt-1',
+            feedbackType: 'correct_detection',
+            category: null,
+            note: 'Verified phone checking',
+            createdAt: '2026-10-04T10:20:00Z',
+          },
+        },
+      ],
+      feedbacks: [
+        {
+          id: 'fb-2',
+          sessionId: 'session-uuid-1',
+          detectionEventId: null,
+          feedbackType: 'missed_detection',
+          category: 'phone_use',
+          note: 'Was reading text message',
+          createdAt: '2026-10-04T10:25:00Z',
+        },
+      ],
+    };
+
+    const rawHtml = renderToString(
+      <SessionsPage initialSessions={mockSessions} initialDetail={detailWithFeedback} />
+    );
+    const html = rawHtml.replace(/<!--.*?-->/g, '');
+
+    // Event feedback badge
+    expect(html).toContain('✓ Correct');
+    expect(html).toContain('Change');
+
+    // Session-level feedback item
+    expect(html).toContain('Missed: Phone Use');
+    expect(html).toContain('Was reading text message');
   });
 });

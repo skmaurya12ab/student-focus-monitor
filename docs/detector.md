@@ -159,7 +159,7 @@ MediaPipe vision tasks (`FaceLandmarker`, `HandLandmarker`, `PoseLandmarker`) ar
 ## 11. Versioning
 
 - **Detector Engine Version**: `DETECTOR_VERSION = "v4"`
-- **Feature Schema Version**: `FEATURE_SCHEMA_VERSION = "telemetry_v1"`
+- **Feature Schema Version**: `FEATURE_SCHEMA_VERSION = "telemetry_v2"` (updated in Phase 11 with baseline-relative deltas, motion rates, and tracker states)
 
 ---
 
@@ -198,4 +198,25 @@ WebSocket detection_result Emitted to Browser
 4. **Controlled DB Persistence Frequency**: Rows in PostgreSQL `detection_events` are inserted ONLY when an alert condition's persistence delay is satisfied (event start) and updated when the condition ends (event end) or session stops. Zero writes occur on raw frames.
 5. **Session Stop Finalization**: Calling `POST /api/sessions/{session_id}/stop` safely stops frame ingestion, finalizes any in-progress distraction events, persists authoritative duration and focus metrics to `study_sessions`, and releases MediaPipe vision resources.
 6. **Privacy Integrity**: Zero image frames, pixels, or screenshots are written to PostgreSQL, disk, or logs. Only canonical categories, timestamps, and numerical metrics are stored.
+
+---
+
+## 13. Phase 11 Telemetry & User Feedback Ingestion
+
+In Phase 11, the authoritative backend detection pipeline captures trustworthy numerical and structured telemetry into PostgreSQL (`telemetry_samples`), coupled with human labels from `session_feedback`:
+
+1. **Authoritative Backend Origin**:
+   Telemetry originates directly from the backend detection pipeline (`camera frame → MediaPipe → calibration → rules → tracker state → telemetry sample → persistence`). It is never reconstructed or approximated on the frontend.
+2. **Numerical & Baseline-Relative Retention**:
+   - Both raw values (e.g. `head_yaw = 18.5`) and baseline-relative deltas (e.g. `head_yaw_from_baseline = 16.5`, `shoulder_z_delta = 0.21`) are preserved.
+   - Dynamic motion rates (`head_yaw_rate`, `head_pitch_rate`, `shoulder_z_rate`) and multi-category tracker states are captured in the JSONB `features` payload.
+   - Non-zero null semantics: missing features are stored as `null`/`None`, never converted into misleading zeros.
+3. **Deliberate Sampling & Bounded Buffering**:
+   - Samples are emitted at ~5 Hz target cadence (`telemetry_interval_sec = 0.2`), matching processed inference frames rather than raw camera frame rates.
+   - `BufferedTelemetrySink` manages an in-memory queue (`maxsize = 500`), evicting oldest samples under high database load to protect memory bounds.
+   - Telemetry batches are persisted asynchronously without blocking vision inference.
+   - Clean shutdown flushes all buffered samples upon WebSocket disconnect or session stop.
+4. **Strict Zero Raw Media Guarantee**:
+   All telemetry pipelines strip any prohibited media keys (`image`, `video`, `jpeg`, `png`, `frame_bytes`, `audio`, `raw_buffer`, `camera`).
+
 

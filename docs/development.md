@@ -176,6 +176,15 @@ pytest tests/session/test_session_history_api.py -v
 pytest tests/session/test_analytics_api.py -v
 ```
 
+Run Phase 11 telemetry and user feedback tests:
+
+```bash
+pytest tests/session/test_feedback_api.py -v
+pytest tests/detection/test_telemetry_numerical_correctness.py -v
+pytest tests/detection/test_telemetry_sampling_buffering.py -v
+pytest tests/db/test_telemetry.py -v
+```
+
 ### Frontend Tests
 
 From the `frontend/` directory:

@@ -184,7 +184,7 @@ class StudentDistractionDetector:
         self.session_state.record_step(new_state, dt)
 
         self.previous_features = features
-        self._maybe_emit_telemetry(features)
+        self._maybe_emit_telemetry(features, tracker_results=tracker_results)
         return self._build_state_payload(features, tracker_results=tracker_results)
 
     def process_results(
@@ -231,7 +231,11 @@ class StudentDistractionDetector:
 
         return self.process_features(features, timestamp=now)
 
-    def _maybe_emit_telemetry(self, features: FeatureSnapshot) -> None:
+    def _maybe_emit_telemetry(
+        self,
+        features: FeatureSnapshot,
+        tracker_results: Optional[dict[str, Any]] = None,
+    ) -> None:
         """Sample and emit numerical telemetry at the configured sampling interval."""
         now = features.timestamp
 
@@ -249,6 +253,7 @@ class StudentDistractionDetector:
             calibration_complete=self.calibration.complete,
             baseline=self.calibration.baseline,
             config=self.config,
+            tracker_results=tracker_results,
         )
         self.telemetry_sink.emit_telemetry(payload)
 

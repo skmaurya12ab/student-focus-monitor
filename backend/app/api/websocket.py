@@ -243,4 +243,8 @@ async def websocket_session_live_transport(
         active_rt = detection_runtime_manager.get_runtime(session_uuid)
         if active_rt:
             active_rt.set_result_callback(None)
+            try:
+                await active_rt.flush_telemetry()
+            except Exception as e:
+                logger.debug("Failed to flush telemetry on websocket disconnect: %s", e)
         live_transport_manager.unregister_connection(session_uuid, websocket, reason="Clean disconnect")

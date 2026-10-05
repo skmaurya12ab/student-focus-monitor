@@ -106,6 +106,26 @@ class SessionService:
         events_res = await db.execute(events_stmt)
         db_events = events_res.scalars().all()
 
+        # Fetch feedbacks for this session
+        from app.db.models.session_feedback import SessionFeedback
+        from app.schemas.feedback import SessionFeedbackResponse
+
+        fb_stmt = (
+            select(SessionFeedback)
+            .where(SessionFeedback.session_id == session_id)
+            .order_by(SessionFeedback.created_at.asc())
+        )
+        fb_res = await db.execute(fb_stmt)
+        db_feedbacks = fb_res.scalars().all()
+        feedback_responses = [SessionFeedbackResponse.model_validate(fb) for fb in db_feedbacks]
+
+        # Map detection_event_id -> feedback
+        event_feedback_map = {
+            fb.detection_event_id: fb
+            for fb in feedback_responses
+            if fb.detection_event_id is not None
+        }
+
         # Category breakdown & top causes
         CATEGORY_LABELS = {
             "looking_away": "Looking Away",
@@ -121,7 +141,9 @@ class SessionService:
 
         event_responses = []
         for evt in db_events:
-            event_responses.append(DetectionEventResponse.model_validate(evt))
+            evt_resp = DetectionEventResponse.model_validate(evt)
+            evt_resp.feedback = event_feedback_map.get(evt.id)
+            event_responses.append(evt_resp)
             c = evt.event_type
             cat_counts[c] = cat_counts.get(c, 0) + 1
             cat_durations[c] = cat_durations.get(c, 0.0) + (evt.duration_seconds or 0.0)
@@ -144,11 +166,16 @@ class SessionService:
         ]
         top_causes_str = " · ".join(top_causes_list) if top_causes_list else "None detected"
 
-        detail = StudySessionDetailResponse.model_validate(session)
-        detail.distraction_count = len(db_events)
-        detail.events = event_responses
-        detail.top_causes = f"Top causes: {top_causes_str}" if top_causes_list else "No distractions"
-        detail.category_breakdown = breakdown
+        base_resp = StudySessionResponse.model_validate(session)
+        dump_data = base_resp.model_dump()
+        dump_data["distraction_count"] = len(db_events)
+        detail = StudySessionDetailResponse(
+            **dump_data,
+            events=event_responses,
+            feedbacks=feedback_responses,
+            top_causes=f"Top causes: {top_causes_str}" if top_causes_list else "No distractions",
+            category_breakdown=breakdown,
+        )
 
         return detail
 
@@ -243,7 +270,7 @@ class SessionService:
             away_seconds=0.0,
             focus_score=None,
             detector_version="v4",
-            feature_schema_version="telemetry_v1",
+            feature_schema_version="telemetry_v2",
             calibration_snapshot={"device_hint": device_hint, "notes": notes} if (device_hint or notes) else None,
         )
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Mapping
 
 DETECTOR_VERSION: str = "v4"
-FEATURE_SCHEMA_VERSION: str = "telemetry_v1"
+FEATURE_SCHEMA_VERSION: str = "telemetry_v2"
 
 # Canonical human-readable alert names (v4 compatible)
 ALERT_LOOKING_AWAY: str = "Looking Away"
@@ -95,8 +95,8 @@ class DetectorConfig:
     calibration_seconds: float = 10.0
     minimum_calibration_samples: int = 30
 
-    # Telemetry sampling interval in seconds (2 Hz = 0.5 sec)
-    telemetry_interval_sec: float = 0.5
+    # Telemetry sampling interval in seconds (5 Hz = 0.2 sec, aligned with transport cadence)
+    telemetry_interval_sec: float = 0.2
 
     # Local desktop runner options
     draw_landmarks: bool = True

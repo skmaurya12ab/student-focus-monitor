@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models.detection_event import DetectionEvent
 from app.db.models.study_session import StudySession
+from app.db.models.telemetry_sample import TelemetrySample
 from app.db.session import AsyncSessionLocal
 from app.detection.config import (
     ALERT_NAME_TO_CATEGORY,
@@ -36,7 +37,9 @@ from app.detection.config import (
     DetectorConfig,
 )
 from app.detection.detector import StudentDistractionDetector
+from app.detection.features import finite_or_none
 from app.detection.mediapipe_runtime import MediaPipeRuntime
+from app.detection.telemetry import BufferedTelemetrySink
 from app.detection.trackers import MultiCategoryTracker
 
 logger = logging.getLogger(__name__)
@@ -65,10 +68,15 @@ class SessionDetectionRuntime:
         self.config: DetectorConfig = config or DetectorConfig()
         self.db_session_factory = db_session_factory or AsyncSessionLocal
 
+        # Phase 11 Buffered Telemetry Sink
+        self.telemetry_sink: BufferedTelemetrySink = BufferedTelemetrySink(maxsize=500)
+        self.last_telemetry_flush: float = time.monotonic()
+
         # Phase 2 Modular detector instance
         self.detector: StudentDistractionDetector = StudentDistractionDetector(
             config=self.config,
             session_id=str(session_id),
+            telemetry_sink=self.telemetry_sink,
         )
 
         # Lazy-initialized MediaPipe runtime
@@ -160,7 +168,11 @@ class SessionDetectionRuntime:
                     # 1. Update database event lifecycle (starts / ends)
                     await self._handle_event_persistence(raw_result, timestamp)
 
-                    # 2. Build structured detection result payload
+                    # 2. Flush pending telemetry if threshold reached (>=10 samples or >=2s elapsed)
+                    if self.telemetry_sink.pending_count() >= 10 or (time.monotonic() - self.last_telemetry_flush) >= 2.0:
+                        await self._flush_telemetry()
+
+                    # 3. Build structured detection result payload
                     result_payload = self._build_detection_result_payload(raw_result, timestamp)
                     self.last_result = result_payload
 
@@ -357,13 +369,142 @@ class SessionDetectionRuntime:
             },
         }
 
+    async def flush_telemetry(self, db: Optional[AsyncSession] = None) -> int:
+        """Public method to flush any pending telemetry samples (e.g. on transport disconnect)."""
+        return await self._flush_telemetry(db=db, force_all=True)
+
+    async def _flush_telemetry(
+        self,
+        db: Optional[AsyncSession] = None,
+        force_all: bool = False,
+    ) -> int:
+        """Persist buffered telemetry samples into PostgreSQL in batches.
+
+        Guarantees:
+        - Strictly non-blocking to vision inference
+        - Drops oldest samples if bounded buffer overflows
+        - Strips any accidental raw media keys
+        - Converts non-finite numbers to NULL
+        - Fails gracefully without terminating the detection session
+        """
+        batch_limit = None if force_all else 50
+        raw_samples = self.telemetry_sink.drain(limit=batch_limit)
+        if not raw_samples:
+            return 0
+
+        self.last_telemetry_flush = time.monotonic()
+        self.telemetry_sink.last_flush_time = self.last_telemetry_flush
+
+        db_samples = []
+        for p in raw_samples:
+            ts = p.get("timestamp")
+            if ts is not None:
+                sampled_at = datetime.fromtimestamp(ts, tz=timezone.utc)
+            else:
+                sampled_at = datetime.now(timezone.utc)
+
+            pitch = finite_or_none(p.get("head_pitch"))
+            yaw = finite_or_none(p.get("head_yaw"))
+            roll = finite_or_none(p.get("head_roll"))
+            ear = finite_or_none(p.get("ear"))
+            mar = finite_or_none(p.get("mar"))
+            dist = finite_or_none(p.get("hand_cheek_distance") or p.get("min_hand_cheek_distance"))
+            sh_z = finite_or_none(p.get("shoulder_z"))
+            face_pres = bool(p.get("face_present")) if p.get("face_present") is not None else None
+            pose_pres = bool(p.get("pose_present")) if p.get("pose_present") is not None else None
+            h_count = int(p.get("hand_count")) if p.get("hand_count") is not None else None
+            focus_st = p.get("state")
+
+            features_dict = {
+                # Baseline-relative features
+                "head_yaw_from_baseline": finite_or_none(p.get("head_yaw_from_baseline")),
+                "head_pitch_from_baseline": finite_or_none(p.get("head_pitch_from_baseline")),
+                "head_roll_from_baseline": finite_or_none(p.get("head_roll_from_baseline")),
+                "shoulder_z_delta": finite_or_none(p.get("shoulder_z_delta")),
+                "torso_aspect_ratio": finite_or_none(p.get("torso_aspect_ratio")),
+                "torso_posture_delta": finite_or_none(p.get("torso_posture_delta")),
+                # Facial & Hand details
+                "left_ear": finite_or_none(p.get("left_ear")),
+                "right_ear": finite_or_none(p.get("right_ear")),
+                "left_hand_cheek_distance": finite_or_none(p.get("left_hand_cheek_distance")),
+                "right_hand_cheek_distance": finite_or_none(p.get("right_hand_cheek_distance")),
+                # Motion rates
+                "head_yaw_rate": finite_or_none(p.get("head_yaw_rate")),
+                "head_pitch_rate": finite_or_none(p.get("head_pitch_rate")),
+                "head_roll_rate": finite_or_none(p.get("head_roll_rate")),
+                "shoulder_z_rate": finite_or_none(p.get("shoulder_z_rate")),
+                "hand_cheek_distance_rate": finite_or_none(p.get("hand_cheek_distance_rate")),
+                # Instantaneous condition flags
+                "looking_away": bool(p.get("looking_away", False)),
+                "phone_use": bool(p.get("phone_use", False)),
+                "yawning": bool(p.get("yawning", False)),
+                "eyes_closed": bool(p.get("eyes_closed", False)),
+                "leaning_back": bool(p.get("leaning_back", False)),
+                "away_from_desk": bool(p.get("away_from_desk", False)),
+                # Alerts and tracker states
+                "active_alerts": p.get("active_alerts", []),
+                "tracker_states": p.get("tracker_states", {}),
+                # Calibration & thresholds
+                "calibration_complete": bool(p.get("calibration_complete", False)),
+                "baseline": p.get("baseline"),
+                "thresholds": p.get("thresholds", {}),
+                "alert_delays_sec": p.get("alert_delays_sec", {}),
+                # Metrics
+                "focused_seconds": p.get("focused_seconds"),
+                "distracted_seconds": p.get("distracted_seconds"),
+                "away_seconds": p.get("away_seconds"),
+                "distraction_count": p.get("distraction_count"),
+            }
+
+            sample = TelemetrySample(
+                session_id=self.session_id,
+                sampled_at=sampled_at,
+                frame_index=p.get("frame_index"),
+                detector_version=p.get("detector_version", DETECTOR_VERSION),
+                feature_schema_version=p.get("feature_schema_version", FEATURE_SCHEMA_VERSION),
+                head_pitch=pitch,
+                head_yaw=yaw,
+                head_roll=roll,
+                ear=ear,
+                mar=mar,
+                min_hand_cheek_distance=dist,
+                shoulder_z=sh_z,
+                face_present=face_pres,
+                pose_present=pose_pres,
+                hand_count=h_count,
+                focus_state=focus_st,
+                features=features_dict,
+            )
+            db_samples.append(sample)
+
+        async def _insert(session: AsyncSession) -> None:
+            session.add_all(db_samples)
+            await session.commit()
+
+        try:
+            if db is not None:
+                await _insert(db)
+            else:
+                async with self.db_session_factory() as session:
+                    await _insert(session)
+            self.telemetry_sink.samples_persisted += len(db_samples)
+            return len(db_samples)
+        except Exception as e:
+            logger.warning(
+                "Telemetry sample persistence failed for session %s: %s",
+                self.session_id,
+                e,
+            )
+            return 0
+
     async def stop(self, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
         """Stop detection runtime following strict finalization order:
         1. Stop accepting new frame submissions (is_running = False)
         2. Allow accepted detector work in queue to finalize
         3. Finalize active detection events in PostgreSQL
-        4. Calculate final session metrics from detector session state
-        5. Close MediaPipe vision tasks runtime
+        4. Flush all remaining telemetry samples to PostgreSQL
+        5. Calculate final session metrics from detector session state
+        6. Close MediaPipe vision tasks runtime
         """
         # Step 1: stop accepting new frame submissions
         self.is_running = False
@@ -419,6 +560,15 @@ class SessionDetectionRuntime:
                 logger.error("Error finalizing open detection events for session %s: %s", self.session_id, e)
             finally:
                 self.active_db_events.clear()
+
+        # 2. Flush all remaining buffered telemetry samples to PostgreSQL
+        try:
+            while self.telemetry_sink.pending_count() > 0:
+                flushed = await self._flush_telemetry(db=db, force_all=True)
+                if flushed == 0:
+                    break
+        except Exception as e:
+            logger.warning("Error during final telemetry flush for session %s: %s", self.session_id, e)
 
         # 2. Compute final summary from detector session state
         summary = self.detector.finish_session(now=now)

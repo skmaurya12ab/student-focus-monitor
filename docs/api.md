@@ -409,14 +409,80 @@ Aggregates historical performance metrics across completed study sessions within
 
 ---
 
-## 6. Detection & Future Compatibility (Phase 11+)
+## 6. User Feedback & Telemetry Endpoints (Phase 11)
 
-Phase 6 established the authoritative session container (`id`), Phase 7 established live transport, Phase 8 connected the real MediaPipe detection engine, Phase 9 integrated the live real-time dashboard, and Phase 10 integrated historical session queries and focus analytics:
-- **Phase 8 (Real Detection — Completed)**: Real MediaPipe detector integration into the live stream using the established `detector_hook` seam. Real `detection_events` are persisted in PostgreSQL, and final session focus scores are calculated upon session stop.
-- **Phase 9 (Live Dashboard — Completed)**: Real-time dashboard integration preserving Figma design truth, repeating pulsating audio alert with Web Audio API, prominent persistent distraction banner, user-configurable persistence thresholds via `/api/settings`, dynamic session metrics, and live state progression timeline.
-- **Phase 10 (Session History & Analytics — Completed)**: Real PostgreSQL-backed historical session browsing with server-side bounded pagination, session detail view with discrete `DetectionEvent`s and canonical category breakdowns, and historical focus analytics with date-range filtering, timezone-aware bucketing, dynamic trend lines, and IDOR protection.
-- **Phase 11 (Telemetry — Future)**: Telemetry samples will reference `telemetry_samples.session_id`.
-- Zero ML or trained neural network models are used; the deterministic v4-lineage rule-based engine is the production detection engine. ML remains intentionally deferred to Phases 12–14.
+Phase 11 establishes explicit human labeling and numerical telemetry persistence from authoritative backend detection runtime data for future ML dataset construction.
+
+### 6.1. Submit Session Feedback
+
+Allows the authenticated student to voluntarily provide feedback on a historical detection event or report a missed distraction / general note for a study session.
+
+- **Method / Path**: `POST /api/sessions/{session_id}/feedback`
+- **Authentication**: Required (`sfm_session` cookie)
+- **IDOR / Ownership**: Enforced. The target study session and referenced detection event must belong to the authenticated user.
+- **Request Body**:
+  ```json
+  {
+    "detection_event_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "feedback_type": "correct_detection",
+    "category": null,
+    "note": "Verified phone use while studying"
+  }
+  ```
+  - `detection_event_id` (optional UUID): ID of the detected distraction event. Required for `correct_detection` and `false_positive`. Omitted for `missed_detection` and `other`.
+  - `feedback_type` (string, required): One of `correct_detection`, `false_positive`, `missed_detection`, `other`.
+  - `category` (optional string): Canonical distraction category (e.g. `phone_use`, `looking_away`, `yawning`, `drowsy`, `leaning_back`, `away_from_desk`). Required for `missed_detection`.
+  - `note` (optional string, max 1000 chars): Optional user observation.
+- **Idempotency & Deduplication**:
+  - Event-specific feedback: Idempotent upsert on `(session_id, detection_event_id)`. Clicking a different feedback classification updates the existing record rather than creating duplicate labels.
+  - Missed detections: Deduplicated by `(session_id, category)` to prevent accidental spam.
+- **Response**: `201 Created` (or `200 OK` on update)
+  ```json
+  {
+    "id": "c1afecd5-141f-4351-9fd7-03f9d75c0c35",
+    "session_id": "36e9553a-992e-4104-b094-58ad3a6eefd7",
+    "detection_event_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "feedback_type": "correct_detection",
+    "category": null,
+    "note": "Verified phone use while studying",
+    "created_at": "2026-10-05T15:34:30.123456Z"
+  }
+  ```
+- **Error Codes**:
+  - `400 Bad Request`: Missing category for missed detection, or invalid category.
+  - `401 Unauthorized`: Not authenticated.
+  - `404 Not Found`: Session or referenced detection event not found or belongs to another user.
+  - `422 Unprocessable Entity`: Malformed UUID or note exceeding 1000 characters.
+
+---
+
+### 6.2. Get Session Feedbacks
+
+Retrieves all user feedback records submitted for a given study session.
+
+- **Method / Path**: `GET /api/sessions/{session_id}/feedback`
+- **Authentication**: Required (`sfm_session` cookie)
+- **IDOR / Ownership**: Enforced. Only the owner can access their session's feedbacks.
+- **Response**: `200 OK` (list of `SessionFeedbackResponse` objects)
+
+---
+
+### 6.3. Get Session Telemetry Samples (Diagnostic)
+
+Retrieves recorded numerical telemetry samples for diagnostic inspection and validation.
+
+- **Method / Path**: `GET /api/sessions/{session_id}/telemetry?limit=50&offset=0`
+- **Authentication**: Required (`sfm_session` cookie)
+- **IDOR / Ownership**: Enforced.
+- **Response**: `200 OK` (list of `TelemetrySampleResponse` objects, containing scalar metrics, `feature_schema_version = "telemetry_v2"`, and structured `features` JSONB, with strictly zero raw media).
+
+---
+
+## 7. Future Compatibility (Phase 12+)
+
+- **Phase 11 (Completed)**: Real-time numerical telemetry capture (`telemetry_v2`) from backend detection runtime into PostgreSQL (`telemetry_samples`) at ~5 Hz target cadence with bounded buffering, zero raw media guarantees, and explicit human labeling (`session_feedback`).
+- **Phase 12 (Dataset Pipeline — Future)**: Future offline pipeline to associate `telemetry_samples` with `detection_events` and `session_feedback` human labels for ML dataset construction. Phase 11 explicitly contains NO ML training, NO inference, and NO dataset exports.
+
 
 
 

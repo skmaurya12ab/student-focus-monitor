@@ -28,7 +28,7 @@ class StudySessionResponse(BaseModel):
     focus_score: Optional[Decimal] = None
     distraction_count: int = 0
     detector_version: str = "v4"
-    feature_schema_version: str = "telemetry_v1"
+    feature_schema_version: str = "telemetry_v2"
     created_at: datetime
     updated_at: datetime
 
@@ -44,6 +44,9 @@ class StudySessionStopResponse(BaseModel):
     session: StudySessionResponse
 
 
+from app.schemas.feedback import SessionFeedbackResponse
+
+
 class DetectionEventResponse(BaseModel):
     """Discrete detection event representation for historical session detail."""
     model_config = ConfigDict(from_attributes=True)
@@ -57,6 +60,7 @@ class DetectionEventResponse(BaseModel):
     detector_version: str = "v4"
     metadata_json: Optional[dict] = None
     created_at: datetime
+    feedback: Optional[SessionFeedbackResponse] = None
 
 
 class SessionCategorySummary(BaseModel):
@@ -68,8 +72,9 @@ class SessionCategorySummary(BaseModel):
 
 
 class StudySessionDetailResponse(StudySessionResponse):
-    """Enriched session details with discrete events and top causes."""
+    """Enriched session details with discrete events, user feedback, and top causes."""
     events: list[DetectionEventResponse] = []
+    feedbacks: list[SessionFeedbackResponse] = []
     top_causes: str = ""
     category_breakdown: list[SessionCategorySummary] = []
 

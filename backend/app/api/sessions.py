@@ -156,3 +156,84 @@ async def stop_study_session(
         status="success",
         session=resp,
     )
+
+
+from app.schemas.feedback import SessionFeedbackCreateRequest, SessionFeedbackResponse
+from app.schemas.telemetry import TelemetrySampleResponse
+from app.services.feedback_service import FeedbackService
+from app.db.models.telemetry_sample import TelemetrySample
+from sqlalchemy import select
+
+
+@router.post(
+    "/{session_id}/feedback",
+    response_model=SessionFeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit student feedback on a detection event or session accuracy",
+)
+async def submit_session_feedback(
+    session_id: uuid.UUID,
+    payload: SessionFeedbackCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+) -> SessionFeedbackResponse:
+    """Submit human feedback (correct_detection, false_positive, missed_detection, other) for a session.
+    
+    Enforces user ownership, prevents duplicate submissions via idempotent upsert,
+    and structures canonical distraction categories for future ML evaluation.
+    """
+    feedback = await FeedbackService.submit_feedback(
+        db,
+        user_id=current_user.id,
+        session_id=session_id,
+        payload=payload,
+    )
+    return SessionFeedbackResponse.model_validate(feedback)
+
+
+@router.get(
+    "/{session_id}/feedback",
+    response_model=list[SessionFeedbackResponse],
+    summary="Retrieve all feedback submissions for a study session",
+)
+async def get_session_feedbacks(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+) -> list[SessionFeedbackResponse]:
+    """Retrieve all human feedback entries submitted for the specified study session."""
+    feedbacks = await FeedbackService.get_session_feedbacks(
+        db,
+        user_id=current_user.id,
+        session_id=session_id,
+    )
+    return [SessionFeedbackResponse.model_validate(fb) for fb in feedbacks]
+
+
+@router.get(
+    "/{session_id}/telemetry",
+    response_model=list[TelemetrySampleResponse],
+    summary="Retrieve persisted numerical telemetry samples for diagnostic inspection",
+)
+async def get_session_telemetry(
+    session_id: uuid.UUID,
+    limit: int = Query(100, ge=1, le=1000, description="Max samples to return"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+) -> list[TelemetrySampleResponse]:
+    """Retrieve persisted numerical telemetry samples for a session owned by the authenticated user."""
+    session = await SessionService.get_session_by_id(db, session_id, current_user.id)
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Study session not found or forbidden.",
+        )
+    stmt = (
+        select(TelemetrySample)
+        .where(TelemetrySample.session_id == session_id)
+        .order_by(TelemetrySample.sampled_at.asc())
+        .limit(limit)
+    )
+    res = await db.execute(stmt)
+    samples = res.scalars().all()
+    return [TelemetrySampleResponse.model_validate(s) for s in samples]
