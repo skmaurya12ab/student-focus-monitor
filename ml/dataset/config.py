@@ -144,16 +144,18 @@ MISSING_INDICATOR_FEATURES: tuple[str, ...] = (
     "torso_aspect_ratio_missing",
 )
 
-# Complete ordered feature allowlist for ML model inputs
-FEATURE_COLUMNS_ALLOWLIST: tuple[str, ...] = (
+# Canonical model input features: strictly physical measurements, derived motion rates, baselines, and missing indicators.
+# Strictly EXCLUDES detector rule outputs, tracker states, event timing, feedback, or identifiers.
+MODEL_FEATURE_COLUMNS: tuple[str, ...] = (
     CORE_NUMERICAL_FEATURES
     + CORE_PRESENCE_FEATURES
     + FLATTENED_NUMERICAL_FEATURES
     + BASELINE_CALIBRATION_FEATURES
-    + RULE_BOOLEAN_FEATURES
-    + TRACKER_FEATURES
     + MISSING_INDICATOR_FEATURES
 )
+
+# Backward-compatible alias for MODEL_FEATURE_COLUMNS
+FEATURE_COLUMNS_ALLOWLIST: tuple[str, ...] = MODEL_FEATURE_COLUMNS
 
 # Multi-label category target columns
 TARGET_CATEGORY_COLUMNS: tuple[str, ...] = tuple(
@@ -166,8 +168,8 @@ TARGET_COLUMNS: tuple[str, ...] = TARGET_CATEGORY_COLUMNS + (
     "label_distracted",
 )
 
-# Metadata and provenance columns (traceability without leaking into model features)
-METADATA_COLUMNS: tuple[str, ...] = (
+# Provenance / metadata columns (traceability without leaking into model features)
+PROVENANCE_COLUMNS: tuple[str, ...] = (
     "sample_id",
     "session_hash",
     "frame_index",
@@ -183,12 +185,20 @@ METADATA_COLUMNS: tuple[str, ...] = (
     "is_excluded",
     "exclusion_reason",
 )
+METADATA_COLUMNS: tuple[str, ...] = PROVENANCE_COLUMNS
 
-# Complete dataset columns (features + targets + metadata)
+# Diagnostic columns: rule detector booleans and tracker states retained for Phase 13 comparative evaluations
+DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
+    RULE_BOOLEAN_FEATURES
+    + TRACKER_FEATURES
+)
+
+# Complete ordered dataset columns in Parquet artifact (features + targets + provenance + diagnostics)
 ALL_DATASET_COLUMNS: tuple[str, ...] = (
-    FEATURE_COLUMNS_ALLOWLIST
+    MODEL_FEATURE_COLUMNS
     + TARGET_COLUMNS
-    + METADATA_COLUMNS
+    + PROVENANCE_COLUMNS
+    + DIAGNOSTIC_COLUMNS
 )
 
 

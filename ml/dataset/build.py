@@ -21,15 +21,18 @@ from ml.dataset.config import (
     CANONICAL_CATEGORIES,
     DATASET_VERSION,
     DETECTOR_VERSION,
+    DIAGNOSTIC_COLUMNS,
     FEATURE_COLUMNS_ALLOWLIST,
     FEATURE_SCHEMA_VERSION,
     METADATA_COLUMNS,
+    MODEL_FEATURE_COLUMNS,
+    PROVENANCE_COLUMNS,
     TARGET_COLUMNS,
     DatasetConfig,
 )
 from ml.dataset.export import export_dataset
 from ml.dataset.extract import DatasetSources, extract_from_database
-from ml.dataset.features import flatten_telemetry_features
+from ml.dataset.features import extract_diagnostic_features, flatten_telemetry_features
 from ml.dataset.feedback import build_feedback_index
 from ml.dataset.labels import resolve_sample_labels
 from ml.dataset.manifest import (
@@ -42,6 +45,8 @@ from ml.dataset.splits import compute_grouped_user_splits
 from ml.dataset.synthetic import generate_synthetic_sources
 from ml.dataset.validation import (
     DataQualityValidationError,
+    validate_data_split_leakage,
+    validate_feature_target_leakage,
     validate_frame_monotonicity,
     validate_leakage,
     validate_no_nan_or_inf,
@@ -137,7 +142,7 @@ def build_ml_dataset(
             excluded_count += 1
             continue
 
-        # Extract allowlisted features
+        # Extract allowlisted model features (strictly sensor & motion measurements)
         features_row = flatten_telemetry_features(sample)
 
         # Assemble full dataset row
@@ -150,7 +155,7 @@ def build_ml_dataset(
         row["focus_state_label"] = sample_labels.focus_state_label
         row["label_distracted"] = sample_labels.label_distracted
 
-        # Attach metadata (strictly non-PII, no raw user_id!)
+        # Attach provenance / metadata (strictly non-PII, no raw user_id!)
         split_name = split_assignment.session_splits.get(sample.session_id, "all")
         row["sample_id"] = str(sample.id)
         row["session_hash"] = hash_token(sample.session_id, prefix="ses")
@@ -167,30 +172,32 @@ def build_ml_dataset(
         row["is_excluded"] = sample_labels.is_excluded
         row["exclusion_reason"] = sample_labels.exclusion_reason
 
+        # Attach diagnostic features (retained detector outputs, not in model feature matrix)
+        diagnostic_row = extract_diagnostic_features(sample)
+        row.update(diagnostic_row)
+
         rows.append(row)
 
     if not rows:
-        if excluded_count > 0:
-            raise DataQualityValidationError(
-                f"Pipeline generated 0 dataset rows ({excluded_count} sample(s) were excluded, e.g. calibration samples). "
-                "Consider passing --include-calibration if you wish to export calibration telemetry."
-            )
-        raise DataQualityValidationError(
-            "Pipeline generated 0 dataset rows. Check filters or input data sources."
+        warnings.append(
+            f"Canonical dataset contains 0 exported samples because all {excluded_count} raw samples were excluded "
+            f"(e.g. calibration samples under default include_calibration=False policy). "
+            f"Valid empty Parquet artifact, schema, and manifest generated successfully."
         )
-
-    # Convert to DataFrame with strict column ordering
-    df = pd.DataFrame(rows)
-    for col in ALL_DATASET_COLUMNS:
-        if col not in df.columns:
-            df[col] = None
-    df = df[list(ALL_DATASET_COLUMNS)]
+        df = pd.DataFrame(columns=list(ALL_DATASET_COLUMNS))
+    else:
+        # Convert to DataFrame with strict column ordering
+        df = pd.DataFrame(rows)
+        for col in ALL_DATASET_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
+        df = df[list(ALL_DATASET_COLUMNS)]
 
     # Step 7: Rigorous quality & privacy validation
     validate_no_nan_or_inf(df)
     privacy_stats = validate_privacy(df)
     validate_ranges(df)
-    validate_leakage(df, session_to_user)
+    validate_data_split_leakage(df, session_to_user)
     validate_frame_monotonicity(df)
 
     # Step 8: Build metadata documents
@@ -373,8 +380,11 @@ def main() -> None:
         print("\n✓ DATASET PIPELINE COMPLETED SUCCESSFULLY")
         print("-" * 60)
         print(f"Total exported samples : {len(result.dataframe)}")
-        print(f"Feature columns count  : {len(FEATURE_COLUMNS_ALLOWLIST)}")
+        print(f"Model feature columns  : {len(MODEL_FEATURE_COLUMNS)}")
         print(f"Target columns count   : {len(TARGET_COLUMNS)}")
+        print(f"Provenance columns     : {len(PROVENANCE_COLUMNS)}")
+        print(f"Diagnostic columns     : {len(DIAGNOSTIC_COLUMNS)}")
+        print(f"Total columns count    : {len(ALL_DATASET_COLUMNS)}")
         print(f"Split validity         : {result.split_summary.get('is_split_valid')}")
         if result.manifest.get("warnings"):
             print("\nWarnings:")

@@ -25,6 +25,12 @@ def export_dataset(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Clean up stale CSV if not requesting CSV export
+    if not export_csv:
+        stale_csv = output_dir / "dataset.csv"
+        if stale_csv.exists():
+            stale_csv.unlink()
+
     artifacts: dict[str, Path] = {}
 
     # 1. Export Parquet

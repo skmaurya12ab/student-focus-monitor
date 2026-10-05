@@ -224,11 +224,17 @@ In Phase 11, the authoritative backend detection pipeline captures trustworthy n
 ## 14. Phase 12 ML Dataset Pipeline Integration
 
 In Phase 12, detector telemetry (`telemetry_samples`), discrete distraction events (`detection_events`), and human labels (`session_feedback`) are converted into a row-oriented, leakage-safe supervised-learning dataset:
-- **Feature Allowlist**: Flattens 62 explicit numerical, presence, baseline-relative, motion rate, rule, and tracker features.
-- **Multi-Label Targets**: Maps the 6 canonical distractions (`looking_away`, `phone_use`, `yawning`, `drowsy`, `leaning_back`, `away_from_desk`) into discrete `1`/`0`/`null` labels plus overall `focus_state_label`.
+- **Explicit Schema Separation (84 Total Columns)**:
+  - **Model Feature Columns (38 columns)**: Direct 3D angles, aspect ratios, distances, depth, presence indicators, baseline deltas, motion velocity rates, baseline medians, and missing indicators. Strictly **excludes** detector rule and tracker outputs.
+  - **Diagnostic Columns (24 columns)**: Retains all 6 instantaneous rule booleans (`rule_*`) and 18 tracker states (`tracker_*`) outside the model feature matrix so Phase 13 can perform side-by-side comparative evaluations against the rule detector without causing target leakage.
+  - **Target Columns (8 columns)**: Maps the 6 canonical distractions (`looking_away`, `phone_use`, `yawning`, `drowsy`, `leaning_back`, `away_from_desk`) into discrete `1`/`0`/`null` labels plus overall `focus_state_label` and binary `label_distracted`.
+  - **Provenance Columns (14 columns)**: Traceability tokens (`sample_id`, `session_hash`, `split`, `label_source`, `label_quality`, etc.) for scientific auditing without PII.
+- **Why Rule & Tracker Outputs Are Excluded from Model Features**:
+  Rule outputs (`rule_*`) and tracker states (`tracker_*`) are already decisions of the authoritative detector that Phase 13 is intended to learn or improve upon. Including them in model features allows the ML model to trivially reproduce heuristic rule thresholds instead of learning from movement kinematics.
 - **Deterministic Alignment**: Temporal interval matching associates events with telemetry samples.
 - **Label Conflict Resolution**: Human feedback takes precedence (`correct_detection` confirms positive, `false_positive` overrides to negative `0` while recording human-rejected provenance).
 - **Grouped User Splitting**: Partitions data strictly at the user boundary to prevent session/sample leakage.
+- **Calibration Policy**: Canonical training dataset excludes initial calibration frames by default; diagnostic calibration data can be generated in a separate artifact directory.
 - Detailed technical reference: see [docs/ml-dataset.md](ml-dataset.md).
 
 

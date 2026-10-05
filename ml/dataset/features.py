@@ -15,7 +15,9 @@ from ml.dataset.config import (
     RULE_BOOLEAN_FEATURES,
     TRACKER_FEATURES,
     MISSING_INDICATOR_FEATURES,
+    MODEL_FEATURE_COLUMNS,
     FEATURE_COLUMNS_ALLOWLIST,
+    DIAGNOSTIC_COLUMNS,
     PROHIBITED_MEDIA_SUBSTRINGS,
     PROHIBITED_PII_SUBSTRINGS,
 )
@@ -96,7 +98,34 @@ def flatten_telemetry_features(sample: ExtractedTelemetrySample) -> dict[str, An
         baseline_dict.get("torso_aspect_ratio"), "baseline_torso_aspect_ratio"
     )
 
-    # 5. Rule boolean features from JSONB
+    # 5. Explicit missing indicator flags
+    result["head_pitch_missing"] = bool(result["head_pitch"] is None)
+    result["head_yaw_missing"] = bool(result["head_yaw"] is None)
+    result["head_roll_missing"] = bool(result["head_roll"] is None)
+    result["ear_missing"] = bool(result["ear"] is None)
+    result["mar_missing"] = bool(result["mar"] is None)
+    result["min_hand_cheek_distance_missing"] = bool(result["min_hand_cheek_distance"] is None)
+    result["shoulder_z_missing"] = bool(result["shoulder_z"] is None)
+    result["torso_aspect_ratio_missing"] = bool(result["torso_aspect_ratio"] is None)
+
+    # 6. Assert exact match with MODEL_FEATURE_COLUMNS (strictly no rule_* or tracker_* columns!)
+    for col in MODEL_FEATURE_COLUMNS:
+        if col not in result:
+            raise KeyError(f"Model feature column {col} missing in flattened dictionary.")
+
+    # Return ordered dictionary conforming strictly to MODEL_FEATURE_COLUMNS
+    return {col: result[col] for col in MODEL_FEATURE_COLUMNS}
+
+
+def extract_diagnostic_features(sample: ExtractedTelemetrySample) -> dict[str, Any]:
+    """
+    Extract rule-detector and tracker states from sample.features into a flat dictionary.
+    Retained strictly for diagnostic and baseline comparison in Phase 13, NEVER as model inputs.
+    """
+    result: dict[str, Any] = {}
+    json_features = sample.features or {}
+
+    # 1. Rule boolean features from JSONB
     result["rule_looking_away"] = bool(json_features.get("looking_away", False))
     result["rule_phone_use"] = bool(json_features.get("phone_use", False))
     result["rule_yawning"] = bool(json_features.get("yawning", False))
@@ -104,7 +133,7 @@ def flatten_telemetry_features(sample: ExtractedTelemetrySample) -> dict[str, An
     result["rule_leaning_back"] = bool(json_features.get("leaning_back", False))
     result["rule_away_from_desk"] = bool(json_features.get("away_from_desk", False))
 
-    # 6. Tracker state features from JSONB features["tracker_states"]
+    # 2. Tracker state features from JSONB features["tracker_states"]
     tracker_dict = json_features.get("tracker_states") or {}
     if not isinstance(tracker_dict, dict):
         tracker_dict = {}
@@ -119,20 +148,9 @@ def flatten_telemetry_features(sample: ExtractedTelemetrySample) -> dict[str, An
         ) or 0.0
         result[f"tracker_{cat}_persistence_met"] = bool(t_state.get("persistence_met", False))
 
-    # 7. Explicit missing indicator flags
-    result["head_pitch_missing"] = bool(result["head_pitch"] is None)
-    result["head_yaw_missing"] = bool(result["head_yaw"] is None)
-    result["head_roll_missing"] = bool(result["head_roll"] is None)
-    result["ear_missing"] = bool(result["ear"] is None)
-    result["mar_missing"] = bool(result["mar"] is None)
-    result["min_hand_cheek_distance_missing"] = bool(result["min_hand_cheek_distance"] is None)
-    result["shoulder_z_missing"] = bool(result["shoulder_z"] is None)
-    result["torso_aspect_ratio_missing"] = bool(result["torso_aspect_ratio"] is None)
-
-    # 8. Assert exact match with allowlist (no extra or missing keys)
-    for col in FEATURE_COLUMNS_ALLOWLIST:
+    for col in DIAGNOSTIC_COLUMNS:
         if col not in result:
-            raise KeyError(f"Feature allowlist column {col} missing in flattened dictionary.")
+            raise KeyError(f"Diagnostic column {col} missing in extracted diagnostic dictionary.")
 
-    # Return ordered dictionary conforming strictly to allowlist
-    return {col: result[col] for col in FEATURE_COLUMNS_ALLOWLIST}
+    return {col: result[col] for col in DIAGNOSTIC_COLUMNS}
+

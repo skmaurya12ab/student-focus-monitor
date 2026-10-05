@@ -13,7 +13,11 @@ from ml.dataset.config import (
     ALL_DATASET_COLUMNS,
     DATASET_VERSION,
     DETECTOR_VERSION,
+    DIAGNOSTIC_COLUMNS,
     FEATURE_SCHEMA_VERSION,
+    MODEL_FEATURE_COLUMNS,
+    PROVENANCE_COLUMNS,
+    TARGET_COLUMNS,
     DatasetConfig,
 )
 from ml.dataset.synthetic import generate_synthetic_sources
@@ -71,6 +75,20 @@ def test_build_ml_dataset_end_to_end(tmp_path: Path):
     schema_spec = json.loads((output_dir / "schema.json").read_text(encoding="utf-8"))
     assert schema_spec["dataset_version"] == DATASET_VERSION
     assert schema_spec["total_columns"] == len(ALL_DATASET_COLUMNS)
+    assert schema_spec["model_feature_columns_count"] == len(MODEL_FEATURE_COLUMNS)
+    assert schema_spec["target_columns_count"] == len(TARGET_COLUMNS)
+    assert schema_spec["provenance_columns_count"] == len(PROVENANCE_COLUMNS)
+    assert schema_spec["diagnostic_columns_count"] == len(DIAGNOSTIC_COLUMNS)
+
+    # Verify column categories are unambiguous
+    for col in MODEL_FEATURE_COLUMNS:
+        assert schema_spec["columns"][col]["category"] == "feature"
+    for col in TARGET_COLUMNS:
+        assert schema_spec["columns"][col]["category"] == "target"
+    for col in PROVENANCE_COLUMNS:
+        assert schema_spec["columns"][col]["category"] == "provenance"
+    for col in DIAGNOSTIC_COLUMNS:
+        assert schema_spec["columns"][col]["category"] == "diagnostic"
 
 
 def test_include_calibration_toggle(tmp_path: Path):
@@ -88,3 +106,95 @@ def test_include_calibration_toggle(tmp_path: Path):
     assert len(res_included.dataframe) > len(res_excluded.dataframe)
     assert (res_included.dataframe["is_calibration"] == True).any()
     assert not (res_excluded.dataframe["is_calibration"] == True).any()
+
+
+def test_all_calibration_samples_excluded_generates_valid_empty_artifact(tmp_path: Path):
+    """
+    Issue 2 Regression Test:
+    When input data contains only calibration telemetry and include_calibration=False,
+    the pipeline must not crash; it must produce a valid 0-row Parquet artifact,
+    valid schema.json, and honest manifest and quality_report reporting pipeline_valid=True
+    and sufficient_data=False.
+    """
+    from datetime import datetime, timezone
+    import uuid
+    from ml.dataset.extract import ExtractedSession, ExtractedTelemetrySample, DatasetSources
+
+    user_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    now = datetime(2026, 10, 5, 12, 0, 0, tzinfo=timezone.utc)
+
+    session = ExtractedSession(
+        id=session_id,
+        user_id=user_id,
+        status="completed",
+        started_at=now,
+        ended_at=now,
+        total_duration_seconds=10.0,
+        focused_seconds=10.0,
+        distracted_seconds=0.0,
+        away_seconds=0.0,
+        focus_score=100.0,
+        detector_version="v4",
+        feature_schema_version="telemetry_v2",
+    )
+
+    # Sample inside calibration window (first 5 seconds, calibration_complete=False)
+    calib_sample = ExtractedTelemetrySample(
+        id=uuid.uuid4(),
+        session_id=session_id,
+        sampled_at=now,
+        frame_index=1,
+        detector_version="v4",
+        feature_schema_version="telemetry_v2",
+        head_pitch=0.0,
+        head_yaw=0.0,
+        head_roll=0.0,
+        ear=0.3,
+        mar=0.2,
+        min_hand_cheek_distance=None,
+        shoulder_z=None,
+        face_present=True,
+        pose_present=True,
+        hand_count=0,
+        focus_state="calibrating",
+        features={"calibration_complete": False},
+    )
+
+    sources = DatasetSources(
+        users={user_id: user_id},
+        sessions={session_id: session},
+        telemetry_samples=[calib_sample],
+        detection_events=[],
+        feedbacks=[],
+    )
+
+    output_dir = tmp_path / "out_empty_calib"
+    cfg = DatasetConfig(output_dir=output_dir, include_calibration=False)
+
+    result = build_ml_dataset(sources=sources, config=cfg)
+
+    # Must produce valid 0-row DataFrame
+    assert len(result.dataframe) == 0
+    assert (output_dir / "dataset.parquet").exists()
+    assert (output_dir / "manifest.json").exists()
+    assert (output_dir / "quality_report.json").exists()
+    assert (output_dir / "schema.json").exists()
+
+    # Read back Parquet and verify column schema
+    read_table = pq.read_table(output_dir / "dataset.parquet")
+    assert read_table.num_rows == 0
+    assert set(read_table.column_names) == set(ALL_DATASET_COLUMNS)
+
+    # Verify manifest accounting
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["row_counts"]["exported_samples"] == 0
+    assert manifest["row_counts"]["excluded_samples"] == 1
+    assert manifest["include_calibration"] is False
+
+    # Verify quality report distinction
+    quality_report = json.loads((output_dir / "quality_report.json").read_text(encoding="utf-8"))
+    assert quality_report["scientific_validity"]["pipeline_valid"] is True
+    assert quality_report["scientific_validity"]["sufficient_data"] is False
+    assert quality_report["scientific_validity"]["label_valid"] is False
+

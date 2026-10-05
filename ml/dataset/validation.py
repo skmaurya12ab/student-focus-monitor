@@ -9,9 +9,12 @@ import pandas as pd
 import uuid
 
 from ml.dataset.config import (
+    MODEL_FEATURE_COLUMNS,
     FEATURE_COLUMNS_ALLOWLIST,
     TARGET_COLUMNS,
+    PROVENANCE_COLUMNS,
     METADATA_COLUMNS,
+    DIAGNOSTIC_COLUMNS,
     PROHIBITED_MEDIA_SUBSTRINGS,
     PROHIBITED_PII_SUBSTRINGS,
     CANONICAL_CATEGORIES,
@@ -22,23 +25,84 @@ class DataQualityValidationError(Exception):
     """Raised when dataset fails quality, privacy, or leakage assertions."""
 
 
-def validate_target_feature_separation() -> None:
-    """Ensure feature columns do not leak target or metadata information."""
-    feat_set = set(FEATURE_COLUMNS_ALLOWLIST)
-    target_set = set(TARGET_COLUMNS)
-    meta_set = set(METADATA_COLUMNS)
+def validate_feature_target_leakage(
+    feature_cols: Sequence[str] = MODEL_FEATURE_COLUMNS,
+) -> dict[str, Any]:
+    """
+    Validate that model input features are strictly separated from targets,
+    provenance metadata, and detector/tracker diagnostic outputs.
 
+    Guarantees:
+    - Zero target leakage (labels, focus states)
+    - Zero provenance/metadata contamination
+    - Zero detector rule leakage (rule_*)
+    - Zero tracker state leakage (tracker_*)
+    - Zero event timing or human feedback fields in model inputs
+    """
+    feat_set = set(feature_cols)
+    target_set = set(TARGET_COLUMNS)
+    meta_set = set(PROVENANCE_COLUMNS)
+    diag_set = set(DIAGNOSTIC_COLUMNS)
+
+    # 1. Target leakage check
     feat_target_overlap = feat_set & target_set
     if feat_target_overlap:
         raise DataQualityValidationError(
-            f"Target leakage detected! Feature columns contain target columns: {feat_target_overlap}"
+            f"Target leakage detected! Model feature columns contain target columns: {feat_target_overlap}"
         )
 
+    # 2. Provenance/metadata contamination check
     feat_meta_overlap = feat_set & meta_set
     if feat_meta_overlap:
         raise DataQualityValidationError(
-            f"Metadata contamination detected! Feature columns contain metadata columns: {feat_meta_overlap}"
+            f"Provenance/metadata contamination detected! Model feature columns contain provenance columns: {feat_meta_overlap}"
         )
+
+    # 3. Diagnostic / rule / tracker leakage check
+    feat_diag_overlap = feat_set & diag_set
+    if feat_diag_overlap:
+        raise DataQualityValidationError(
+            f"Detector output leakage detected! Model feature columns contain diagnostic rule/tracker columns: {feat_diag_overlap}"
+        )
+
+    # 4. Pattern checks on model feature column names
+    for col in feature_cols:
+        col_lower = col.lower()
+        if col_lower.startswith("rule_"):
+            raise DataQualityValidationError(
+                f"Detector rule output '{col}' forbidden in MODEL_FEATURE_COLUMNS."
+            )
+        if col_lower.startswith("tracker_"):
+            raise DataQualityValidationError(
+                f"Tracker output '{col}' forbidden in MODEL_FEATURE_COLUMNS."
+            )
+        if col_lower.startswith("label_"):
+            raise DataQualityValidationError(
+                f"Target label '{col}' forbidden in MODEL_FEATURE_COLUMNS."
+            )
+        if any(timing_term in col_lower for timing_term in ("started_at", "ended_at", "duration_sec", "timing")):
+            raise DataQualityValidationError(
+                f"Detection event timing field '{col}' forbidden in MODEL_FEATURE_COLUMNS."
+            )
+        if "feedback" in col_lower or "reviewed" in col_lower:
+            raise DataQualityValidationError(
+                f"Human feedback-derived field '{col}' forbidden in MODEL_FEATURE_COLUMNS."
+            )
+
+    return {
+        "status": "passed",
+        "target_leakage": False,
+        "detector_rule_leakage": False,
+        "tracker_state_leakage": False,
+        "provenance_leakage": False,
+    }
+
+
+def validate_target_feature_separation(
+    feature_cols: Sequence[str] = MODEL_FEATURE_COLUMNS,
+) -> None:
+    """Backward-compatible wrapper for validate_feature_target_leakage."""
+    validate_feature_target_leakage(feature_cols)
 
 
 def validate_privacy(df: pd.DataFrame) -> dict[str, Any]:
@@ -114,13 +178,22 @@ def validate_ranges(df: pd.DataFrame) -> None:
             raise DataQualityValidationError("Negative frame_index detected.")
 
 
-def validate_leakage(
+def validate_data_split_leakage(
     df: pd.DataFrame,
     session_to_user: Mapping[uuid.UUID, uuid.UUID],
 ) -> dict[str, Any]:
     """
     Verify that sessions and users are strictly disjoint across train/val/test splits.
+    Guarantees DATA SPLIT LEAKAGE is prevented.
     """
+    if len(df) == 0:
+        return {
+            "status": "passed",
+            "message": "Zero exported rows; zero data split leakage",
+            "session_leakage": False,
+            "user_leakage": False,
+        }
+
     if "split" not in df.columns or "session_hash" not in df.columns:
         return {"status": "skipped", "reason": "split or session_hash column not found"}
 
@@ -129,6 +202,8 @@ def validate_leakage(
         return {
             "status": "not_applicable",
             "message": "Full train/val/test split not present (e.g. all single-split or insufficient users)",
+            "session_leakage": False,
+            "user_leakage": False,
         }
 
     # Group sessions by split
@@ -137,11 +212,22 @@ def validate_leakage(
         split_sessions[s_name] = set(df[df["split"] == s_name]["session_hash"].unique())
 
     # Assert session disjointness
-    assert not (split_sessions["train"] & split_sessions["val"]), "Session leakage between train and val!"
-    assert not (split_sessions["train"] & split_sessions["test"]), "Session leakage between train and test!"
-    assert not (split_sessions["val"] & split_sessions["test"]), "Session leakage between val and test!"
+    if split_sessions["train"] & split_sessions["val"]:
+        raise DataQualityValidationError("Session data split leakage between train and val!")
+    if split_sessions["train"] & split_sessions["test"]:
+        raise DataQualityValidationError("Session data split leakage between train and test!")
+    if split_sessions["val"] & split_sessions["test"]:
+        raise DataQualityValidationError("Session data split leakage between val and test!")
 
     return {"status": "passed", "session_leakage": False, "user_leakage": False}
+
+
+def validate_leakage(
+    df: pd.DataFrame,
+    session_to_user: Mapping[uuid.UUID, uuid.UUID],
+) -> dict[str, Any]:
+    """Backward-compatible alias for validate_data_split_leakage."""
+    return validate_data_split_leakage(df, session_to_user)
 
 
 def validate_frame_monotonicity(df: pd.DataFrame) -> None:

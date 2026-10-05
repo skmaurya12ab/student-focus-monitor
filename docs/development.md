@@ -194,13 +194,13 @@ pytest tests/ml/ -v
 Build the Phase 12 ML dataset from PostgreSQL:
 
 ```bash
-# Build dataset (excludes initial calibration frames by default)
-python -m ml.dataset.build --output data/datasets/phase12/dataset_v1 --export-csv
+# 1. Build canonical ML training dataset (excludes initial calibration frames by default)
+python -m ml.dataset.build --output data/datasets/phase12/dataset_v1
 
-# Build dataset including initial calibration frames
-python -m ml.dataset.build --include-calibration --output data/datasets/phase12/dataset_v1
+# 2. Build separate diagnostic calibration-inclusive dataset (does NOT replace canonical dataset)
+python -m ml.dataset.build --include-calibration --output data/datasets/phase12/dataset_v1_calibration
 
-# Build using synthetic fixtures for offline testing
+# 3. Build using synthetic fixtures for offline testing
 python -m ml.dataset.build --synthetic --output scratch/synthetic_dataset --export-csv
 ```
 

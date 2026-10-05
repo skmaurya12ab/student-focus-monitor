@@ -7,13 +7,15 @@ import pytest
 import uuid
 
 from ml.dataset.config import (
+    MODEL_FEATURE_COLUMNS,
     FEATURE_COLUMNS_ALLOWLIST,
     CORE_NUMERICAL_FEATURES,
     FLATTENED_NUMERICAL_FEATURES,
     MISSING_INDICATOR_FEATURES,
+    DIAGNOSTIC_COLUMNS,
 )
 from ml.dataset.extract import ExtractedTelemetrySample
-from ml.dataset.features import flatten_telemetry_features
+from ml.dataset.features import extract_diagnostic_features, flatten_telemetry_features
 
 
 def make_sample(**kwargs) -> ExtractedTelemetrySample:
@@ -83,7 +85,12 @@ def test_flatten_telemetry_features_conforms_to_allowlist():
     sample = make_sample()
     flattened = flatten_telemetry_features(sample)
 
-    assert set(flattened.keys()) == set(FEATURE_COLUMNS_ALLOWLIST)
+    assert set(flattened.keys()) == set(MODEL_FEATURE_COLUMNS)
+    # Ensure rule_* and tracker_* are strictly absent from model features
+    assert "rule_looking_away" not in flattened
+    assert "tracker_looking_away_active" not in flattened
+    assert not any(k.startswith("rule_") for k in flattened)
+    assert not any(k.startswith("tracker_") for k in flattened)
     # Ensure unknown keys in sample.features are strictly dropped
     assert "internal_debug_cache" not in flattened
     assert "unrelated_experimental_blob" not in flattened
@@ -101,11 +108,15 @@ def test_flatten_telemetry_features_preserves_values_and_baseline_deltas():
     assert flattened["min_hand_cheek_distance"] == 0.12
     assert flattened["torso_aspect_ratio"] == 0.48
     assert flattened["torso_posture_delta"] == 0.03
-    assert flattened["rule_looking_away"] is True
-    assert flattened["rule_phone_use"] is True
-    assert flattened["tracker_looking_away_active"] is True
-    assert flattened["tracker_looking_away_duration_sec"] == 1.5
-    assert flattened["tracker_looking_away_persistence_met"] is True
+
+    # Diagnostic features are extracted into a separate dictionary
+    diag = extract_diagnostic_features(sample)
+    assert set(diag.keys()) == set(DIAGNOSTIC_COLUMNS)
+    assert diag["rule_looking_away"] is True
+    assert diag["rule_phone_use"] is True
+    assert diag["tracker_looking_away_active"] is True
+    assert diag["tracker_looking_away_duration_sec"] == 1.5
+    assert diag["tracker_looking_away_persistence_met"] is True
 
 
 def test_missing_values_remain_none_and_set_missing_flags():

@@ -82,9 +82,11 @@ Telemetry is preserved exclusively as numerical measurements, baseline deltas, m
 
 ---
 
-## 5. Machine Learning Dataset Privacy Guarantees (Phase 12)
+## 5. Machine Learning Dataset Privacy & Integrity Guarantees (Phase 12)
 
-- **Zero Raw Media in Datasets**: Exported Parquet files contain exclusively numerical metrics, boolean rule/tracker flags, canonical category labels, and non-sensitive provenance tokens.
+- **Zero Raw Media in Datasets**: Exported Parquet files contain exclusively numerical metrics, boolean rule/tracker flags, canonical category labels, and non-sensitive provenance tokens. No images, video clips, audio, screenshots, raw frames, or camera paths are ever permitted.
 - **Automated Privacy Scanner**: `validate_privacy(df)` scans every column name and string value for prohibited media substrings (`image`, `video`, `audio`, `raw_buffer`, `camera`, `screenshot`, etc.) and PII patterns prior to export.
-- **Exclusion of User Identity & PII**: User emails, Google profile identifiers, display names, and raw `user_id` values are excluded from model feature tables. Sessions are referenced using non-reversible short SHA-256 tokens (`session_hash = 'ses_...'`).
+- **Exclusion of User Identity & PII from Model Features**: User emails, Google profile identifiers, display names, passwords, and raw `user_id` values are strictly excluded from model feature tables. Sessions are referenced using non-reversible short SHA-256 tokens (`session_hash = 'ses_...'`).
+- **Feature vs Target vs Provenance vs Diagnostic Separation**: The canonical model feature matrix (`MODEL_FEATURE_COLUMNS`, 38 columns) is completely decoupled from targets (`TARGET_COLUMNS`, 8 columns), provenance metadata (`PROVENANCE_COLUMNS`, 14 columns), and detector diagnostic outputs (`DIAGNOSTIC_COLUMNS`, 24 columns).
+- **Dual Leakage Verification**: The pipeline rigorously validates both **Data Split Leakage** (ensuring zero user or session crossover across train/val/test splits) and **Feature/Target Leakage** (ensuring no labels, provenance, detector rule booleans, tracker states, event timing, or feedback fields contaminate model input features).
 - **Strict Git Exclusion**: Real dataset artifacts (`data/datasets/`, `ml/data/`, `*.parquet`) are ignored via `.gitignore`, guaranteeing that real student movement data is never committed to Git.
