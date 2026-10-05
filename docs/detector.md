@@ -219,4 +219,16 @@ In Phase 11, the authoritative backend detection pipeline captures trustworthy n
 4. **Strict Zero Raw Media Guarantee**:
    All telemetry pipelines strip any prohibited media keys (`image`, `video`, `jpeg`, `png`, `frame_bytes`, `audio`, `raw_buffer`, `camera`).
 
+---
+
+## 14. Phase 12 ML Dataset Pipeline Integration
+
+In Phase 12, detector telemetry (`telemetry_samples`), discrete distraction events (`detection_events`), and human labels (`session_feedback`) are converted into a row-oriented, leakage-safe supervised-learning dataset:
+- **Feature Allowlist**: Flattens 62 explicit numerical, presence, baseline-relative, motion rate, rule, and tracker features.
+- **Multi-Label Targets**: Maps the 6 canonical distractions (`looking_away`, `phone_use`, `yawning`, `drowsy`, `leaning_back`, `away_from_desk`) into discrete `1`/`0`/`null` labels plus overall `focus_state_label`.
+- **Deterministic Alignment**: Temporal interval matching associates events with telemetry samples.
+- **Label Conflict Resolution**: Human feedback takes precedence (`correct_detection` confirms positive, `false_positive` overrides to negative `0` while recording human-rejected provenance).
+- **Grouped User Splitting**: Partitions data strictly at the user boundary to prevent session/sample leakage.
+- Detailed technical reference: see [docs/ml-dataset.md](ml-dataset.md).
+
 

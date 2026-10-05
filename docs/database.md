@@ -366,11 +366,40 @@ pytest tests/db -v
 
 | Phase | Boundary / Responsibility |
 |---|---|
-| **Phase 4 (CURRENT)** | PostgreSQL schema, SQLAlchemy 2.x models, Alembic migrations, database-level constraints, foreign keys, telemetry structure, privacy tests. |
-| **Phase 5 (FUTURE)** | Google OAuth 2.0 / OpenID Connect authentication flow, JWT tokens, session credentials. Uses `users` and `auth_identities`. |
-| **Phase 6 (FUTURE)** | Study session REST APIs (`/sessions/start`, `/sessions/stop`), session accounting persistence. Uses `study_sessions`. |
+| **Phase 4 (COMPLETED)** | PostgreSQL schema, SQLAlchemy 2.x models, Alembic migrations, database-level constraints, foreign keys, telemetry structure, privacy tests. |
+| **Phase 5 (COMPLETED)** | Google OAuth 2.0 / OpenID Connect authentication flow, JWT tokens, session credentials. Uses `users` and `auth_identities`. |
+| **Phase 6 (COMPLETED)** | Study session REST APIs (`/sessions/start`, `/sessions/stop`), session accounting persistence. Uses `study_sessions`. |
 | **Phase 7 (COMPLETED)** | WebRTC / WebSocket low-latency transport for frame streaming between React frontend and FastAPI backend. |
 | **Phase 8 (COMPLETED)** | Real monitoring orchestrator connecting frame transport with the modular detection engine; discrete DetectionEvent persistence. |
-| **Phase 10 (FUTURE)** | Session history, attention trends, and analytics aggregation endpoints. |
-| **Phase 11 (FUTURE)** | Anonymized telemetry export and user feedback UI/endpoints. Uses `session_feedback`. |
-| **Phase 12–14 (FUTURE)** | Machine learning dataset extraction, offline model training, and ML shadow mode inference. |
+| **Phase 9 (COMPLETED)** | Live dashboard, persistent distraction banner, edge-triggered repeating chime, and settings thresholds. |
+| **Phase 10 (COMPLETED)** | Session history, attention trends, and analytics aggregation endpoints. |
+| **Phase 11 (COMPLETED)** | Telemetry ingestion (`telemetry_v2`) and user feedback UI/endpoints. Uses `session_feedback`. |
+| **Phase 12 (COMPLETED)** | ML dataset pipeline: read-only SQL extraction, temporal event alignment, human feedback label resolution, leakage-safe user grouped splitting, and columnar Parquet export. |
+| **Phase 13 (FUTURE)** | Offline machine learning model training and hyperparameter evaluation. |
+| **Phase 14 (FUTURE)** | ML shadow mode inference alongside rule-based detector. |
+
+---
+
+## 8. Phase 12 Machine Learning Dataset Lineage
+
+Phase 12 builds a reproducible, leakage-safe data pipeline converting PostgreSQL data into machine-learning-ready Parquet datasets:
+
+```text
+PostgreSQL Source Tables
+ ├── study_sessions (Provides session boundaries, user grouping)
+ ├── telemetry_samples (v4, telemetry_v2 numerical movement and posture measurements)
+ ├── detection_events (Discrete distraction event intervals)
+ └── session_feedback (Student feedback: correct_detection, false_positive, missed_detection, other)
+       ↓
+[ Read-Only SQL Extraction ] (Zero mutation of production database records)
+       ↓
+[ Event ↔ Telemetry Alignment ] (Temporal window matching: event_start <= sampled_at <= event_end)
+       ↓
+[ Feedback Interpretation ] (Event-specific and session-level human labeling)
+       ↓
+[ Grouped User Splitting ] (Partitions train/val/test strictly at the user level to eliminate leakage)
+       ↓
+[ Parquet Columnar Export ] (dataset.parquet, manifest.json, quality_report.json, schema.json)
+```
+
+For complete specification, see [docs/ml-dataset.md](ml-dataset.md).

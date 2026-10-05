@@ -79,3 +79,12 @@ Telemetry is preserved exclusively as numerical measurements, baseline deltas, m
 - Authentication uses HttpOnly, Secure, SameSite=Lax cookies (`sfm_session`).
 - Tokens are never stored in browser `localStorage`, session storage, or URL query parameters.
 - WebSockets enforce strict `Origin` header matching against configured trusted origins. Wildcard origins are rejected.
+
+---
+
+## 5. Machine Learning Dataset Privacy Guarantees (Phase 12)
+
+- **Zero Raw Media in Datasets**: Exported Parquet files contain exclusively numerical metrics, boolean rule/tracker flags, canonical category labels, and non-sensitive provenance tokens.
+- **Automated Privacy Scanner**: `validate_privacy(df)` scans every column name and string value for prohibited media substrings (`image`, `video`, `audio`, `raw_buffer`, `camera`, `screenshot`, etc.) and PII patterns prior to export.
+- **Exclusion of User Identity & PII**: User emails, Google profile identifiers, display names, and raw `user_id` values are excluded from model feature tables. Sessions are referenced using non-reversible short SHA-256 tokens (`session_hash = 'ses_...'`).
+- **Strict Git Exclusion**: Real dataset artifacts (`data/datasets/`, `ml/data/`, `*.parquet`) are ignored via `.gitignore`, guaranteeing that real student movement data is never committed to Git.

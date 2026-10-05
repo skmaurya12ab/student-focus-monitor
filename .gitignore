@@ -58,6 +58,11 @@ backend/data/
 /data/
 *.task
 
+# ML datasets & artifacts
+ml/data/*
+!ml/data/.gitkeep
+*.parquet
+
 # IDE & OS files
 .idea/
 .vscode/

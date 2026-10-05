@@ -46,8 +46,8 @@ The project consists of **15 total phases** (Phase 0 through Phase 14):
 - **Phase 11 — Telemetry and user feedback (Completed)**
   - Capture trustworthy numerical and structured movement telemetry from authoritative backend detection runtime into PostgreSQL (`telemetry_samples`), capturing raw metrics, baseline-relative deltas, motion rates, tracker states, and calibration metadata under feature schema `telemetry_v2`. Provides voluntary, lightweight human labeling via Session Detail UI (`correct_detection`, `false_positive`, `missed_detection` with structured canonical category, `other`). Bounded queue buffering (`maxsize=500`, 5 Hz target cadence) and disconnect flushing preserve live detection performance. Strictly zero raw media.
 
-- **Phase 12 — ML dataset pipeline (Future)**
-  - Build automated extraction and preprocessing pipelines to associate `telemetry_samples` with `detection_events` and `session_feedback` human labels to curate training datasets. Explicitly deferred to Phase 12; zero ML training or inference in Phase 11.
+- **Phase 12 — ML dataset pipeline (Completed)**
+  - Build automated, leakage-safe extraction and preprocessing pipeline converting PostgreSQL `telemetry_samples`, `detection_events`, and `session_feedback` human labels into a supervised-learning dataset. Granularity: 1 row = 1 telemetry sample (~5 Hz cadence). Flattens 62 allowlisted features (raw coordinates, baseline-relative deltas, motion velocities, rule flags, multi-category tracker states, missing value indicators). Maps 6 canonical distraction targets plus overall focus state. Implements deterministic conflict resolution (human feedback precedence) and grouped user-level splitting (zero user/session leakage). Exports Parquet, schema specification, reproducibility manifest, and scientific quality report. Absolute privacy preserved: zero raw media and zero account PII. Model training and inference strictly deferred to Phase 13.
 
 - **Phase 13 — First ML model (Future)**
   - Train and evaluate the first machine learning model to classify student distraction from movement telemetry.

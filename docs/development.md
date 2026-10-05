@@ -185,6 +185,25 @@ pytest tests/detection/test_telemetry_sampling_buffering.py -v
 pytest tests/db/test_telemetry.py -v
 ```
 
+Run Phase 12 ML dataset pipeline tests:
+
+```bash
+pytest tests/ml/ -v
+```
+
+Build the Phase 12 ML dataset from PostgreSQL:
+
+```bash
+# Build dataset (excludes initial calibration frames by default)
+python -m ml.dataset.build --output data/datasets/phase12/dataset_v1 --export-csv
+
+# Build dataset including initial calibration frames
+python -m ml.dataset.build --include-calibration --output data/datasets/phase12/dataset_v1
+
+# Build using synthetic fixtures for offline testing
+python -m ml.dataset.build --synthetic --output scratch/synthetic_dataset --export-csv
+```
+
 ### Frontend Tests
 
 From the `frontend/` directory:

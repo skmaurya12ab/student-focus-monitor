@@ -6,15 +6,14 @@ A privacy-first web application designed to help students maintain deep focus du
 
 ---
 
-## 📌 Project Status: Phase 9 — Live Dashboard Integration
+## 📌 Project Status: Phase 12 — ML Dataset Pipeline
 
-> **Notice:** This repository is currently at **Phase 9 (Live Dashboard Integration)**.
-> - **Full real-time live monitoring dashboard with real MediaPipe webcam processing and WebSocket live transport is active.**
-> - Truthful live states (`CALIBRATING`, `FOCUSED`, `DISTRACTED`, `AWAY`, `LIVE DISCONNECTED`, `CAMERA ERROR`, `DETECTOR ERROR`).
-> - Web Audio API alert sound with strict edge-triggered deduplication.
-> - Dynamic session metrics, active distraction alert chips, and real-time state progression timeline.
-> - Zero mock-data leakage into active runtime.
-> - Phase 10 (Session History & Analytics) is next. ML remains intentionally deferred.
+> **Notice:** This repository is currently at **Phase 12 (ML Dataset Pipeline)**.
+> - **Full real-time live monitoring dashboard with real MediaPipe webcam processing and WebSocket live transport is active (Phase 9).**
+> - **Session history and historical focus analytics backed by PostgreSQL are active (Phase 10).**
+> - **Trustworthy numerical movement telemetry (`telemetry_samples`, `telemetry_v2`) and voluntary human labeling (`session_feedback`) are active (Phase 11).**
+> - **Reproducible, leakage-safe ML dataset pipeline (`ml.dataset.build`) is implemented and verified (Phase 12).**
+> - **Strict Phase Boundary**: Zero machine learning model training or inference is implemented in Phase 12. Model development is deferred to **Phase 13**.
 
 ---
 
@@ -184,26 +183,36 @@ cd frontend
 npm run build
 ```
 
+### Build ML Dataset Pipeline (Phase 12)
+
+```bash
+# Build dataset from PostgreSQL database (Parquet + JSON metadata)
+python -m ml.dataset.build --output data/datasets/phase12/dataset_v1 --export-csv
+
+# Build using synthetic fixtures for offline testing
+python -m ml.dataset.build --synthetic --output scratch/synthetic_dataset --export-csv
+```
+
 ---
 
 ## 🗺️ Roadmap & Future Phases
 
-The project consists of **15 total phases** (Phase 0 through Phase 14), where Phase 0 is the architecture and specification phase, and Phases 1 through 14 are implementation phases:
+The project consists of **15 total phases** (Phase 0 through Phase 14):
 
-- **Phase 0** — Architecture and specification
-- **Phase 1** — Project bootstrap *(Current)*
-- **Phase 2** — Detection engine refactor
-- **Phase 3** — Figma frontend
-- **Phase 4** — PostgreSQL schema
-- **Phase 5** — Google authentication
-- **Phase 6** — Study session lifecycle
-- **Phase 7** — Camera and realtime transport
-- **Phase 8** — Real monitoring
-- **Phase 9** — Live dashboard integration
-- **Phase 10** — Session history and analytics
-- **Phase 11** — Telemetry and user feedback
-- **Phase 12** — ML dataset pipeline
-- **Phase 13** — First ML model
-- **Phase 14** — ML shadow mode
+- **Phase 0** — Architecture and specification *(Completed)*
+- **Phase 1** — Project bootstrap *(Completed)*
+- **Phase 2** — Detection engine refactor *(Completed)*
+- **Phase 3** — Figma frontend *(Completed)*
+- **Phase 4** — PostgreSQL schema *(Completed)*
+- **Phase 5** — Google authentication *(Completed)*
+- **Phase 6** — Study session lifecycle *(Completed)*
+- **Phase 7** — Camera and realtime transport *(Completed)*
+- **Phase 8** — Real monitoring *(Completed)*
+- **Phase 9** — Live dashboard integration *(Completed)*
+- **Phase 10** — Session history and analytics *(Completed)*
+- **Phase 11** — Telemetry and user feedback *(Completed)*
+- **Phase 12** — ML dataset pipeline *(Completed)*
+- **Phase 13** — First ML model *(Future)*
+- **Phase 14** — ML shadow mode *(Future)*
 
-For full details, see [docs/roadmap.md](file:///run/media/saurabh-kumar-maurya/D43C3FD33C3FAEFC/Student%20Focus%20Monitor%20%E2%80%94%20Dashboard/docs/roadmap.md).
+For full details, see [docs/roadmap.md](docs/roadmap.md) and [docs/ml-dataset.md](docs/ml-dataset.md).
