@@ -180,9 +180,7 @@ def build_ml_dataset(
 
     if not rows:
         warnings.append(
-            f"Canonical dataset contains 0 exported samples because all {excluded_count} raw samples were excluded "
-            f"(e.g. calibration samples under default include_calibration=False policy). "
-            f"Valid empty Parquet artifact, schema, and manifest generated successfully."
+            "Canonical dataset contains zero eligible samples; train/validation/test split is not valid."
         )
         df = pd.DataFrame(columns=list(ALL_DATASET_COLUMNS))
     else:

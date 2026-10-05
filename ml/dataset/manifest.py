@@ -234,11 +234,16 @@ def build_split_summary(
             "positive_category_counts": cat_counts,
         }
 
+    is_split_valid = split_assignment.is_split_valid if len(df) > 0 else False
+    warning = split_assignment.warning
+    if len(df) == 0:
+        warning = "Canonical dataset contains zero eligible samples; train/validation/test split is not valid."
+
     return {
         "dataset_version": DATASET_VERSION,
         "split_strategy": "grouped_by_user",
-        "is_split_valid": split_assignment.is_split_valid,
-        "warning": split_assignment.warning,
+        "is_split_valid": is_split_valid,
+        "warning": warning,
         "splits": splits_data,
     }
 
@@ -254,6 +259,7 @@ def build_manifest(
     warnings: list[str],
 ) -> dict[str, Any]:
     """Construct top-level reproducibility manifest."""
+    is_split_valid = split_assignment.is_split_valid if len(df) > 0 else False
     return {
         "dataset_version": config.dataset_version,
         "detector_version": DETECTOR_VERSION,
@@ -266,7 +272,7 @@ def build_manifest(
             "val": config.val_ratio,
             "test": config.test_ratio,
         },
-        "is_split_valid": split_assignment.is_split_valid,
+        "is_split_valid": is_split_valid,
         "include_calibration": config.include_calibration,
         "missed_detection_window_sec": config.missed_detection_window_sec,
         "row_counts": {

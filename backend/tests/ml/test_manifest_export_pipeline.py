@@ -71,6 +71,10 @@ def test_build_ml_dataset_end_to_end(tmp_path: Path):
     assert quality_report["scientific_validity"]["split_valid"] is True
     assert "categories" in quality_report["label_distribution"]
 
+    # 5b. Check Split Summary JSON
+    split_summary = json.loads((output_dir / "split_summary.json").read_text(encoding="utf-8"))
+    assert split_summary["is_split_valid"] is True
+
     # 6. Check Schema Spec JSON
     schema_spec = json.loads((output_dir / "schema.json").read_text(encoding="utf-8"))
     assert schema_spec["dataset_version"] == DATASET_VERSION
@@ -191,10 +195,17 @@ def test_all_calibration_samples_excluded_generates_valid_empty_artifact(tmp_pat
     assert manifest["row_counts"]["exported_samples"] == 0
     assert manifest["row_counts"]["excluded_samples"] == 1
     assert manifest["include_calibration"] is False
+    assert manifest["is_split_valid"] is False
 
     # Verify quality report distinction
     quality_report = json.loads((output_dir / "quality_report.json").read_text(encoding="utf-8"))
     assert quality_report["scientific_validity"]["pipeline_valid"] is True
-    assert quality_report["scientific_validity"]["sufficient_data"] is False
+    assert quality_report["scientific_validity"]["split_valid"] is False
     assert quality_report["scientific_validity"]["label_valid"] is False
+    assert quality_report["scientific_validity"]["sufficient_data"] is False
+
+    # Verify split summary reporting
+    split_summary = json.loads((output_dir / "split_summary.json").read_text(encoding="utf-8"))
+    assert split_summary["is_split_valid"] is False
+    assert "zero eligible samples" in split_summary["warning"]
 
