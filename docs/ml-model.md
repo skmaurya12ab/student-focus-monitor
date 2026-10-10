@@ -1,16 +1,20 @@
 # Offline Machine Learning Model Baseline & Evaluation (Phase 13)
 
-> **Phase 13 Status**: Implemented & Verified.  
+> **Phase 13 Status**: **Pipeline Implemented & Verified — Real-Data Training and Multi-User Evaluation Blocked by Insufficient Multi-User Data**.  
 > **Absolute Phase Boundary Notice**: Phase 13 implements **only** offline ML model training, preprocessing pipeline construction, evaluation, threshold tuning, and model artifact creation. It does **not** integrate ML into the live detector, replace the rule-based detector, alter detector thresholds or rules, modify WebSocket detection behavior, add runtime ML predictions, introduce shadow mode, or alter live focus state transitions. Shadow-mode runtime integration belongs strictly to **Phase 14**.
 
 ---
 
-## 1. Executive Objective
+## 1. Executive Objective & Status Clarification
 
 The core objective of Phase 13 is to answer:
 > *"Can a supervised machine learning baseline learn distraction and focus patterns from physical movement telemetry alone, evaluated without user or session leakage?"*
 
-Phase 13 establishes the project's first scientifically defensible supervised ML baseline using the columnar dataset artifacts exported by Phase 12 (`dataset_v1`).
+### Project Status Distinction
+It is critical to distinguish three separate milestones:
+1. **ML Training Pipeline Implemented & Tested**: **COMPLETE**. The feature allowlist, leakage-safe scikit-learn preprocessing pipeline, `LogisticRegression` baseline, optional `RandomForestClassifier` challenger, threshold tuning, interpretability ranking, and rule comparison modules are fully implemented with 100% automated test coverage.
+2. **Real-Data Model Trained**: **PENDING / BLOCKED**. The current dataset contains eligible non-calibration telemetry from only one student (`Student A`), preventing multi-user split assignment. Consequently, `model.joblib` is **not created** in the canonical experiment output directory (`model_status = "not_trained"`, `model_artifact_created = false`).
+3. **Real-Data Model Scientifically Evaluated**: **PENDING**. Valid scientific evaluation of generalization to unseen students requires multiple distinct students with labeled sessions.
 
 ---
 
@@ -26,7 +30,7 @@ The training pipeline does **not** issue direct queries to the live PostgreSQL d
 
 ---
 
-## 3. Primary & Secondary Targets
+## 3. Primary Target & Label Provenance Audit
 
 ### Primary Target: `label_distracted`
 - **Semantics**:
@@ -38,14 +42,26 @@ The training pipeline does **not** issue direct queries to the live PostgreSQL d
   - Rows marked invalid or excluded by Phase 12 validation (`is_excluded == True`) are excluded.
   - Rows with missing/null target are excluded.
 
-### Secondary Targets (Extensible Multi-Label Architecture)
-The pipeline is designed to support category-specific binary targets:
-- `label_looking_away`
-- `label_phone_use`
-- `label_yawning`
-- `label_drowsy`
-- `label_leaning_back`
-- `label_away_from_desk`
+### Authoritative Label Source Distribution (dataset_v1)
+Inspection of the 1,651 total exported rows in `dataset.parquet` yields the following exact distribution:
+- Total exported rows: **1,651**
+  - `detector_state_monitoring`: **1,289** (78.07%)
+  - `detector_event`: **307** (18.59%)
+  - `unlabeled`: **55** (3.33%)
+
+For the **1,596 eligible rows** with non-null `label_distracted`:
+- `detector_state_monitoring`: **1,289** (80.76%) — all 1,289 map to `0` (focused)
+- `detector_event`: **307** (19.24%) — all 307 map to `1` (distracted)
+- `human_confirmed_detection`: **0** (0.00%)
+- `human_rejected_detector_event`: **0** (0.00%)
+
+### Critical Scientific Distinctions
+1. **Detector-Derived Pseudo-Labels vs. Ground Truth**:
+   100% of currently eligible target labels derive from detector runtime heuristics (`detector_state_monitoring` and `detector_event`). They are **not** independent human ground truth.
+2. **Rule-Detector Comparison Semantics**:
+   Comparing an ML model trained on detector-derived labels against the rule detector evaluates **imitation and agreement** with the heuristic rules. It must **not** be presented as independent distraction-detection accuracy.
+3. **Independent Human Validation**:
+   Independent human-supported evaluation remains unavailable until multi-student sessions with human labeling (`session_feedback`) are collected.
 
 ---
 
@@ -120,14 +136,17 @@ The pipeline classifies the dataset state into one of three explicit readiness l
 - **State C**: `DATA INVALID / PIPELINE BROKEN` (Corrupt artifact or missing columns).
 
 ### Current Repository Audit Status: State B
-- The local database currently contains 2,012 raw telemetry samples across 14 study sessions and 3 users.
-- 361 samples are calibration samples. All samples for User 2 (36 samples) and User 3 (49 samples) are calibration samples.
-- User 1 has 1,651 exported non-calibration samples (7 sessions).
-- Under grouped user splitting, unseen-user generalization requires at least 3 distinct users with valid non-calibration telemetry. Because only 1 user currently has non-calibration data, train has 0 samples and test has 1,596 eligible samples.
+- The local database currently contains 2,012 raw telemetry samples across 14 study sessions and 3 distinct students:
+  - **Student A**: 1,651 exported non-calibration samples across 7 sessions (276 calibration samples excluded).
+  - **Student B**: 36 samples across 2 sessions (all 36 are calibration samples).
+  - **Student C**: 49 samples in 1 session (all 49 are calibration samples).
+- Under grouped user splitting, unseen-student evaluation requires at least 3 distinct students with valid non-calibration telemetry. Because only **Student A** currently has eligible non-calibration telemetry, the training split has 0 samples and the test split contains 1,596 eligible samples.
 - The pipeline correctly reports:
-  `Status: B. PIPELINE READY BUT INSUFFICIENT REAL DATA`
-  `evaluation_not_valid: True`
-  `validity_reason: "Training split contains 0 samples; insufficient distinct users for multi-split generalization."`
+  - `Readiness State`: `B. PIPELINE READY BUT INSUFFICIENT REAL DATA`
+  - `model_status`: `"not_trained"`
+  - `model_artifact_created`: `false`
+  - `evaluation_not_valid`: `true`
+  - `validity_reason`: `"Training split contains 0 samples (total eligible=1596, test=1596, val=0). Insufficient distinct students for multi-split generalization."`
 - **Zero Fabrication**: No fake labels, SMOTE oversampling, or synthetic rows are used to fabricate real performance metrics.
 
 ---
@@ -149,9 +168,9 @@ The pipeline classifies the dataset state into one of three explicit readiness l
 ## 9. Rule-Based Detector Baseline Comparison
 
 When evaluation splits contain both classes, the offline pipeline compares the ML model against the existing heuristic rule detector:
-- The composite rule indicator (`any_rule_distracted`) is evaluated against the same human-supported target.
+- The composite rule indicator (`any_rule_distracted`) is evaluated against the same target.
 - Metrics are contrasted side-by-side: `ML F1 vs Rule F1 (delta_f1)`.
-- **Note**: The rule detector is an offline benchmark, **not** absolute ground truth.
+- **Note**: The rule detector is an offline benchmark, **not** absolute ground truth. When labels are detector-derived, comparison measures imitation rather than independent accuracy.
 
 ---
 
@@ -167,15 +186,18 @@ Diagnostic feature ranking is automatically extracted:
 ## 11. Model Artifacts & Privacy Guarantee
 
 Model bundles are written to `ml/models/phase13/distracted/`:
-1. `model.joblib`: Serialized scikit-learn pipeline (ignored by Git via `.gitignore`).
-2. `metadata.json`: Model version, dataset version, hyperparameters, anonymized counts, software versions.
-3. `evaluation.json`: Experiment manifest with data validity and model validity flags, metrics, interpretability, and rule comparison.
+1. `model.joblib`: Serialized scikit-learn pipeline (**NOT created** when training is blocked; ignored by Git via `.gitignore`).
+2. `metadata.json`: Model version, dataset version, hyperparameters, anonymized student counts, target provenance, software environments.
+3. `evaluation.json`: Experiment manifest with data validity, model validity, target provenance, and diagnostic metrics.
 4. `feature_schema.json`: Catalog of the 38 allowable feature names and types.
 
+### Isolation of Synthetic Fixtures
+Automated testing uses isolated temporary directories (`tmp_path`) for synthetic model fitting and serialization. Synthetic models are **never** written to `ml/models/phase13/distracted/`.
+
 ### Privacy Assurance
-- Zero raw `user_id`, email addresses, or Google subject IDs appear in artifacts.
+- Anonymized student identifiers (`Student A`, `Student B`, `Student C`) and aggregated counts are used in reports.
+- Zero raw database `user_id` UUIDs, email addresses, or Google subject IDs appear in artifacts or logs.
 - Zero image, video, audio, or camera frame buffers appear in artifacts.
-- Model binary files (`*.joblib`, `*.pkl`) are explicitly ignored by Git.
 
 ---
 

@@ -28,6 +28,10 @@ def build_model_metadata(
     class_distribution: Optional[dict[str, dict[str, Any]]] = None,
     evaluation_status: str = "valid",
     selected_threshold: float = 0.50,
+    model_status: str = "not_trained",
+    model_artifact_created: bool = False,
+    model_artifact_path: Optional[str] = None,
+    target_provenance: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
     Construct model metadata artifact without exposing PII, raw user IDs, or media paths.
@@ -45,6 +49,9 @@ def build_model_metadata(
         "target_name": config.target,
         "training_timestamp": datetime.now(timezone.utc).isoformat(),
         "model_class": "LogisticRegression" if config.model_type == "logistic" else "RandomForestClassifier",
+        "model_status": model_status,
+        "model_artifact_created": bool(model_artifact_created),
+        "model_artifact_path": model_artifact_path,
         "preprocessing_pipeline": [
             {"step": "imputer", "method": "SimpleImputer(strategy='median')"},
             {"step": "scaler", "method": "StandardScaler()"},
@@ -77,6 +84,7 @@ def build_model_metadata(
         "classification_threshold": float(selected_threshold),
         "class_distribution": cd_dist,
         "evaluation_status": evaluation_status,
+        "target_provenance": target_provenance or {},
         "software_versions": {
             "python": sys.version.split()[0],
             "scikit_learn": sklearn.__version__,
@@ -107,9 +115,11 @@ def build_evaluation_manifest(
     threshold_info: Optional[dict[str, Any]] = None,
     interpretability: Optional[dict[str, Any]] = None,
     rule_comparison: Optional[dict[str, Any]] = None,
+    target_provenance: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
-    Construct the experiment evaluation manifest distinguishing data validity and model validity.
+    Construct the experiment evaluation manifest distinguishing data validity, model validity,
+    and target provenance.
     """
     return {
         "evaluation_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -123,10 +133,13 @@ def build_evaluation_manifest(
             "validity_reason": data_validity.get("validity_reason"),
         },
         "model_validity": {
+            "model_status": model_validity.get("model_status", "not_trained"),
+            "model_artifact_created": bool(model_validity.get("model_artifact_created", False)),
             "training_completed": bool(model_validity.get("training_completed", False)),
             "validation_available": bool(model_validity.get("validation_available", False)),
             "test_evaluation_available": bool(model_validity.get("test_evaluation_available", False)),
         },
+        "target_provenance": target_provenance or {},
         "threshold": threshold_info or {"classification_threshold": 0.50, "tuned": False},
         "metrics": metrics_by_split or {},
         "interpretability": interpretability or {"available": False},
@@ -175,14 +188,20 @@ def save_artifacts(
       - metadata.json
       - evaluation.json
       - feature_schema.json
+    
+    If pipeline is None, ensures any stale model.joblib is removed.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     saved_paths = {}
 
+    model_path = output_dir / "model.joblib"
     if pipeline is not None:
-        model_path = output_dir / "model.joblib"
         joblib.dump(pipeline, model_path)
         saved_paths["model_joblib"] = model_path
+    else:
+        # Clean up any stale model binary to avoid claiming a trained model exists
+        if model_path.exists():
+            model_path.unlink()
 
     metadata_path = output_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")

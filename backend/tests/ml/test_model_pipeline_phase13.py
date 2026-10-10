@@ -498,3 +498,93 @@ def test_cli_main_execution(tmp_path: Path):
     assert (out_dir / "feature_schema.json").exists()
     assert (out_dir / "model.joblib").exists()
 
+
+# ==============================================================================
+# 14. AUDIT CORRECTION & LABEL PROVENANCE TESTS
+# ==============================================================================
+
+def test_insufficient_data_does_not_produce_model_joblib(tmp_path: Path):
+    """Verify that insufficient data produces NO model.joblib artifact and sets explicit metadata."""
+    df_synth = make_deterministic_dataset(20)
+    # Remove all train rows
+    df_no_train = df_synth[df_synth["split"] != "train"].copy()
+    out_dir = tmp_path / "model_out"
+
+    # Pre-create a dummy model.joblib to verify it gets cleaned up
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dummy_file = out_dir / "model.joblib"
+    dummy_file.write_text("stale_binary")
+
+    cfg = ModelConfig(output_dir=out_dir, random_seed=42)
+    result = train_model(cfg, df_override=df_no_train)
+
+    assert result.success is False
+    assert result.readiness_state == ReadinessState.B_INSUFFICIENT_DATA
+    assert not (out_dir / "model.joblib").exists()
+    assert "model_joblib" not in result.saved_paths
+    assert result.metadata["model_status"] == "not_trained"
+    assert result.metadata["model_artifact_created"] is False
+    assert result.metadata["model_artifact_path"] is None
+    assert result.evaluation["model_validity"]["model_status"] == "not_trained"
+    assert result.evaluation["model_validity"]["model_artifact_created"] is False
+
+
+def test_canonical_distracted_dir_contains_no_model_joblib():
+    """Verify canonical experiment output directory contains NO model.joblib binary."""
+    canonical_dir = Path("ml/models/phase13/distracted")
+    if canonical_dir.exists():
+        assert not (canonical_dir / "model.joblib").exists(), (
+            "Found model.joblib in canonical output directory when real model training is blocked!"
+        )
+
+
+def test_target_label_source_accounting():
+    """Verify that eligible rows in dataset_v1 derive from detector monitoring and events without human labels."""
+    dataset_parquet = Path("data/datasets/phase12/dataset_v1/dataset.parquet")
+    if not dataset_parquet.exists():
+        pytest.skip("dataset_v1 parquet artifact not found")
+
+    df = pd.read_parquet(dataset_parquet)
+    eligible = df[(df["is_calibration"] != True) & (df["is_excluded"] != True) & (df["label_distracted"].notna())]
+
+    counts = eligible["label_source"].value_counts().to_dict()
+    assert counts.get("detector_state_monitoring") == 1289
+    assert counts.get("detector_event") == 307
+    assert counts.get("human_confirmed_detection", 0) == 0
+    assert counts.get("human_rejected_detector_event", 0) == 0
+
+
+def test_detector_derived_labels_not_described_as_independent_ground_truth(tmp_path: Path):
+    """Verify target provenance explicitly flags detector-derived pseudo-label semantics."""
+    df_synth = make_deterministic_dataset(30)
+    out_dir = tmp_path / "model_out"
+
+    cfg = ModelConfig(output_dir=out_dir, random_seed=42)
+    result = train_model(cfg, df_override=df_synth)
+
+    provenance = result.evaluation.get("target_provenance")
+    assert provenance is not None
+    assert "detector_derived_count" in provenance
+    assert "independent_human_validation_available" in provenance
+    assert "pseudo-labels" in provenance["rule_comparison_semantics"]
+    assert "NOT represent independent distraction-detection accuracy" in provenance["rule_comparison_semantics"]
+
+
+def test_reports_and_metadata_use_anonymized_user_aliases(tmp_path: Path):
+    """Verify that metadata and evaluation manifests contain zero raw database user UUIDs."""
+    import re
+    df_synth = make_deterministic_dataset(30)
+    out_dir = tmp_path / "model_out"
+
+    cfg = ModelConfig(output_dir=out_dir, random_seed=42)
+    result = train_model(cfg, df_override=df_synth)
+
+    uuid_pattern = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+
+    meta_str = json.dumps(result.metadata)
+    eval_str = json.dumps(result.evaluation)
+
+    assert not uuid_pattern.search(meta_str), "Found raw UUID in metadata!"
+    assert not uuid_pattern.search(eval_str), "Found raw UUID in evaluation manifest!"
+
+

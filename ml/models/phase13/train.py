@@ -71,6 +71,45 @@ def load_dataset_artifacts(dataset_path: Path) -> tuple[pd.DataFrame, Optional[d
     return df, manifest
 
 
+def extract_target_provenance(df: pd.DataFrame, target_name: str) -> dict[str, Any]:
+    """
+    Extract distribution of label sources and verify human vs detector pseudo-label origin.
+    """
+    if "label_source" not in df.columns:
+        return {
+            "eligible_sample_count": len(df),
+            "label_source_distribution": {},
+            "human_confirmed_count": 0,
+            "detector_derived_count": 0,
+            "independent_human_validation_available": False,
+            "rule_comparison_semantics": "No label_source column present in input dataframe",
+        }
+
+    label_source_counts = {
+        str(k): int(v) for k, v in df["label_source"].value_counts(dropna=False).items()
+    }
+    human_confirmed = int(
+        df["label_source"].isin(["human_confirmed_detection", "human_rejected_detector_event"]).sum()
+    )
+    detector_derived = int(
+        df["label_source"].isin(["detector_state_monitoring", "detector_event"]).sum()
+    )
+    unlabeled_count = int(df["label_source"].isin(["unlabeled"]).sum())
+
+    return {
+        "eligible_sample_count": len(df),
+        "label_source_distribution": label_source_counts,
+        "human_confirmed_count": human_confirmed,
+        "detector_derived_count": detector_derived,
+        "unlabeled_count": unlabeled_count,
+        "independent_human_validation_available": bool(human_confirmed > 0),
+        "rule_comparison_semantics": (
+            "Rule detector comparison measures imitation and agreement with detector-derived pseudo-labels; "
+            "it does NOT represent independent distraction-detection accuracy."
+        ),
+    }
+
+
 def train_model(
     config: Optional[ModelConfig] = None,
     df_override: Optional[pd.DataFrame] = None,
@@ -112,6 +151,8 @@ def train_model(
                 "validity_reason": err_msg,
             }
             model_val = {
+                "model_status": "not_trained",
+                "model_artifact_created": False,
                 "training_completed": False,
                 "validation_available": False,
                 "test_evaluation_available": False,
@@ -120,8 +161,16 @@ def train_model(
                 config=cfg,
                 dataset_manifest=None,
                 evaluation_status="broken_pipeline",
+                model_status="not_trained",
+                model_artifact_created=False,
+                model_artifact_path=None,
+                target_provenance={},
             )
-            evaluation = build_evaluation_manifest(data_val, model_val)
+            evaluation = build_evaluation_manifest(
+                data_validity=data_val,
+                model_validity=model_val,
+                target_provenance={},
+            )
             schema = build_feature_schema()
             saved = save_artifacts(cfg.output_dir, None, metadata, evaluation, schema)
             return TrainResult(
@@ -155,6 +204,9 @@ def train_model(
     filtered_df = filtered_df[filtered_df[cfg.target].notna()]
     eligible_count = len(filtered_df)
 
+    # Extract target label provenance for eligible rows
+    target_prov = extract_target_provenance(filtered_df, cfg.target)
+
     # 4. Check for zero eligible samples
     if eligible_count == 0:
         reason = (
@@ -171,6 +223,8 @@ def train_model(
             "validity_reason": reason,
         }
         model_val = {
+            "model_status": "not_trained",
+            "model_artifact_created": False,
             "training_completed": False,
             "validation_available": False,
             "test_evaluation_available": False,
@@ -179,8 +233,16 @@ def train_model(
             config=cfg,
             dataset_manifest=manifest,
             evaluation_status="insufficient_data",
+            model_status="not_trained",
+            model_artifact_created=False,
+            model_artifact_path=None,
+            target_provenance=target_prov,
         )
-        evaluation = build_evaluation_manifest(data_val, model_val)
+        evaluation = build_evaluation_manifest(
+            data_validity=data_val,
+            model_validity=model_val,
+            target_provenance=target_prov,
+        )
         schema = build_feature_schema()
         saved = save_artifacts(cfg.output_dir, None, metadata, evaluation, schema)
         return TrainResult(
@@ -202,7 +264,7 @@ def train_model(
     val_df = filtered_df[filtered_df["split"] == "val"]
     test_df = filtered_df[filtered_df["split"] == "test"]
 
-    # Accounting
+    # Accounting (using short non-reversible session_hash and anonymized counts)
     def get_split_stats(sub_df: pd.DataFrame) -> dict[str, int]:
         n_samples = len(sub_df)
         n_sessions = sub_df["session_hash"].nunique() if "session_hash" in sub_df.columns else 0
@@ -227,7 +289,7 @@ def train_model(
     if train_samples == 0:
         reason = (
             f"Training split contains 0 samples (total eligible={eligible_count}, test={len(test_df)}, val={len(val_df)}). "
-            f"Insufficient distinct users for multi-split generalization."
+            f"Insufficient distinct students for multi-split generalization."
         )
         warnings.append(reason)
         data_val = {
@@ -239,6 +301,8 @@ def train_model(
             "validity_reason": reason,
         }
         model_val = {
+            "model_status": "not_trained",
+            "model_artifact_created": False,
             "training_completed": False,
             "validation_available": False,
             "test_evaluation_available": False,
@@ -248,8 +312,16 @@ def train_model(
             dataset_manifest=manifest,
             split_counts=split_counts,
             evaluation_status="insufficient_data",
+            model_status="not_trained",
+            model_artifact_created=False,
+            model_artifact_path=None,
+            target_provenance=target_prov,
         )
-        evaluation = build_evaluation_manifest(data_val, model_val)
+        evaluation = build_evaluation_manifest(
+            data_validity=data_val,
+            model_validity=model_val,
+            target_provenance=target_prov,
+        )
         schema = build_feature_schema()
         saved = save_artifacts(cfg.output_dir, None, metadata, evaluation, schema)
         return TrainResult(
@@ -278,6 +350,8 @@ def train_model(
             "validity_reason": reason,
         }
         model_val = {
+            "model_status": "not_trained",
+            "model_artifact_created": False,
             "training_completed": False,
             "validation_available": False,
             "test_evaluation_available": False,
@@ -287,8 +361,16 @@ def train_model(
             dataset_manifest=manifest,
             split_counts=split_counts,
             evaluation_status="insufficient_data",
+            model_status="not_trained",
+            model_artifact_created=False,
+            model_artifact_path=None,
+            target_provenance=target_prov,
         )
-        evaluation = build_evaluation_manifest(data_val, model_val)
+        evaluation = build_evaluation_manifest(
+            data_validity=data_val,
+            model_validity=model_val,
+            target_provenance=target_prov,
+        )
         schema = build_feature_schema()
         saved = save_artifacts(cfg.output_dir, None, metadata, evaluation, schema)
         return TrainResult(
@@ -342,19 +424,16 @@ def train_model(
     }
 
     # 10. Multi-split evaluation
-    # Train evaluation
     train_probs = pipeline.predict_proba(X_train)[:, 1]
     train_preds = predict_with_threshold(train_probs, selected_threshold)
     train_metrics = compute_binary_metrics(y_train, train_preds, train_probs)
 
-    # Validation evaluation
     val_metrics = None
     if len(val_df) > 0:
         val_probs = pipeline.predict_proba(X_val)[:, 1]
         val_preds = predict_with_threshold(val_probs, selected_threshold)
         val_metrics = compute_binary_metrics(y_val, val_preds, val_probs)
 
-    # Test evaluation (unseen users/sessions)
     test_metrics = None
     if len(test_df) > 0:
         test_probs = pipeline.predict_proba(X_test)[:, 1]
@@ -367,7 +446,6 @@ def train_model(
         "test": test_metrics,
     }
 
-    # Class distributions
     class_distribution = {
         "train": train_metrics["class_distribution"],
         "val": val_metrics["class_distribution"] if val_metrics else None,
@@ -398,11 +476,14 @@ def train_model(
         "validity_reason": None,
     }
     model_val = {
+        "model_status": "trained",
+        "model_artifact_created": True,
         "training_completed": True,
         "validation_available": has_val_eval,
         "test_evaluation_available": has_test_eval,
     }
 
+    model_joblib_path = str(cfg.output_dir / "model.joblib")
     metadata = build_model_metadata(
         config=cfg,
         dataset_manifest=manifest,
@@ -410,6 +491,10 @@ def train_model(
         class_distribution=class_distribution,
         evaluation_status="valid",
         selected_threshold=selected_threshold,
+        model_status="trained",
+        model_artifact_created=True,
+        model_artifact_path=model_joblib_path,
+        target_provenance=target_prov,
     )
     evaluation = build_evaluation_manifest(
         data_validity=data_val,
@@ -418,6 +503,7 @@ def train_model(
         threshold_info=threshold_info,
         interpretability=interpretability,
         rule_comparison=rule_comparison,
+        target_provenance=target_prov,
     )
     schema = build_feature_schema()
 

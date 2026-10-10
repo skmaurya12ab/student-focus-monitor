@@ -4,8 +4,11 @@
   "detector_version": "v4",
   "feature_schema_version": "telemetry_v2",
   "target_name": "label_distracted",
-  "training_timestamp": "2026-10-10T12:01:55.420641+00:00",
+  "training_timestamp": "2026-10-10T14:55:33.884771+00:00",
   "model_class": "LogisticRegression",
+  "model_status": "not_trained",
+  "model_artifact_created": false,
+  "model_artifact_path": null,
   "preprocessing_pipeline": [
     {
       "step": "imputer",
@@ -83,6 +86,18 @@
   "classification_threshold": 0.5,
   "class_distribution": {},
   "evaluation_status": "insufficient_data",
+  "target_provenance": {
+    "eligible_sample_count": 1596,
+    "label_source_distribution": {
+      "detector_state_monitoring": 1289,
+      "detector_event": 307
+    },
+    "human_confirmed_count": 0,
+    "detector_derived_count": 1596,
+    "unlabeled_count": 0,
+    "independent_human_validation_available": false,
+    "rule_comparison_semantics": "Rule detector comparison measures imitation and agreement with detector-derived pseudo-labels; it does NOT represent independent distraction-detection accuracy."
+  },
   "software_versions": {
     "python": "3.14.4",
     "scikit_learn": "1.9.0",

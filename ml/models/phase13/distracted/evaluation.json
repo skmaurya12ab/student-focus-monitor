@@ -1,5 +1,5 @@
 {
-  "evaluation_timestamp": "2026-10-10T12:01:55.420713+00:00",
+  "evaluation_timestamp": "2026-10-10T14:55:33.884847+00:00",
   "model_version": "model_v1",
   "data_validity": {
     "pipeline_valid": true,
@@ -7,12 +7,26 @@
     "split_valid": false,
     "sufficient_data": false,
     "evaluation_not_valid": true,
-    "validity_reason": "Training split contains 0 samples (total eligible=1596, test=1596, val=0). Insufficient distinct users for multi-split generalization."
+    "validity_reason": "Training split contains 0 samples (total eligible=1596, test=1596, val=0). Insufficient distinct students for multi-split generalization."
   },
   "model_validity": {
+    "model_status": "not_trained",
+    "model_artifact_created": false,
     "training_completed": false,
     "validation_available": false,
     "test_evaluation_available": false
+  },
+  "target_provenance": {
+    "eligible_sample_count": 1596,
+    "label_source_distribution": {
+      "detector_state_monitoring": 1289,
+      "detector_event": 307
+    },
+    "human_confirmed_count": 0,
+    "detector_derived_count": 1596,
+    "unlabeled_count": 0,
+    "independent_human_validation_available": false,
+    "rule_comparison_semantics": "Rule detector comparison measures imitation and agreement with detector-derived pseudo-labels; it does NOT represent independent distraction-detection accuracy."
   },
   "threshold": {
     "classification_threshold": 0.5,
