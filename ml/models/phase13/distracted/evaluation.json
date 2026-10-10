@@ -1,0 +1,28 @@
+{
+  "evaluation_timestamp": "2026-10-10T12:01:55.420713+00:00",
+  "model_version": "model_v1",
+  "data_validity": {
+    "pipeline_valid": true,
+    "label_valid": true,
+    "split_valid": false,
+    "sufficient_data": false,
+    "evaluation_not_valid": true,
+    "validity_reason": "Training split contains 0 samples (total eligible=1596, test=1596, val=0). Insufficient distinct users for multi-split generalization."
+  },
+  "model_validity": {
+    "training_completed": false,
+    "validation_available": false,
+    "test_evaluation_available": false
+  },
+  "threshold": {
+    "classification_threshold": 0.5,
+    "tuned": false
+  },
+  "metrics": {},
+  "interpretability": {
+    "available": false
+  },
+  "rule_comparison": {
+    "comparison_available": false
+  }
+}

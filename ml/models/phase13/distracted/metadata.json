@@ -1,0 +1,92 @@
+{
+  "model_version": "model_v1",
+  "dataset_version": "dataset_v1",
+  "detector_version": "v4",
+  "feature_schema_version": "telemetry_v2",
+  "target_name": "label_distracted",
+  "training_timestamp": "2026-10-10T12:01:55.420641+00:00",
+  "model_class": "LogisticRegression",
+  "preprocessing_pipeline": [
+    {
+      "step": "imputer",
+      "method": "SimpleImputer(strategy='median')"
+    },
+    {
+      "step": "scaler",
+      "method": "StandardScaler()"
+    },
+    {
+      "step": "classifier",
+      "method": "logistic",
+      "class_weight": null,
+      "solver": "lbfgs",
+      "max_iter": 1000
+    }
+  ],
+  "random_seed": 42,
+  "sample_counts": {
+    "train": 0,
+    "val": 0,
+    "test": 1596
+  },
+  "user_counts": {
+    "train": 0,
+    "val": 0,
+    "test": 0
+  },
+  "session_counts": {
+    "train": 0,
+    "val": 0,
+    "test": 7
+  },
+  "feature_count": 38,
+  "feature_names": [
+    "head_pitch",
+    "head_yaw",
+    "head_roll",
+    "ear",
+    "mar",
+    "min_hand_cheek_distance",
+    "shoulder_z",
+    "face_present",
+    "pose_present",
+    "hand_count",
+    "head_pitch_from_baseline",
+    "head_yaw_from_baseline",
+    "head_roll_from_baseline",
+    "left_ear",
+    "right_ear",
+    "left_hand_cheek_distance",
+    "right_hand_cheek_distance",
+    "shoulder_z_delta",
+    "torso_aspect_ratio",
+    "torso_posture_delta",
+    "head_yaw_rate",
+    "head_pitch_rate",
+    "head_roll_rate",
+    "shoulder_z_rate",
+    "hand_cheek_distance_rate",
+    "baseline_head_yaw",
+    "baseline_head_pitch",
+    "baseline_head_roll",
+    "baseline_shoulder_z",
+    "baseline_torso_aspect_ratio",
+    "head_pitch_missing",
+    "head_yaw_missing",
+    "head_roll_missing",
+    "ear_missing",
+    "mar_missing",
+    "min_hand_cheek_distance_missing",
+    "shoulder_z_missing",
+    "torso_aspect_ratio_missing"
+  ],
+  "classification_threshold": 0.5,
+  "class_distribution": {},
+  "evaluation_status": "insufficient_data",
+  "software_versions": {
+    "python": "3.14.4",
+    "scikit_learn": "1.9.0",
+    "joblib": "1.5.3",
+    "pandas": "3.0.5"
+  }
+}

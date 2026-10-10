@@ -1,0 +1,196 @@
+{
+  "feature_schema_version": "telemetry_v2",
+  "model_feature_columns_count": 38,
+  "features": [
+    {
+      "name": "head_pitch",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_yaw",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_roll",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "ear",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "mar",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "min_hand_cheek_distance",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "shoulder_z",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "face_present",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "pose_present",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "hand_count",
+      "data_type": "int64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_pitch_from_baseline",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_yaw_from_baseline",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_roll_from_baseline",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "left_ear",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "right_ear",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "left_hand_cheek_distance",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "right_hand_cheek_distance",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "shoulder_z_delta",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "torso_aspect_ratio",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "torso_posture_delta",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_yaw_rate",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_pitch_rate",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_roll_rate",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "shoulder_z_rate",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "hand_cheek_distance_rate",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "baseline_head_yaw",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "baseline_head_pitch",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "baseline_head_roll",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "baseline_shoulder_z",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "baseline_torso_aspect_ratio",
+      "data_type": "float64",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_pitch_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_yaw_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "head_roll_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "ear_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "mar_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "min_hand_cheek_distance_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "shoulder_z_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    },
+    {
+      "name": "torso_aspect_ratio_missing",
+      "data_type": "bool",
+      "category": "model_feature"
+    }
+  ]
+}

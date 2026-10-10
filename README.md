@@ -6,14 +6,15 @@ A privacy-first web application designed to help students maintain deep focus du
 
 ---
 
-## 📌 Project Status: Phase 12 — ML Dataset Pipeline
+## 📌 Project Status: Phase 13 — First ML Model (Offline Baseline)
 
-> **Notice:** This repository is currently at **Phase 12 (ML Dataset Pipeline)**.
+> **Notice:** This repository is currently at **Phase 13 (First ML Model)**.
 > - **Full real-time live monitoring dashboard with real MediaPipe webcam processing and WebSocket live transport is active (Phase 9).**
 > - **Session history and historical focus analytics backed by PostgreSQL are active (Phase 10).**
 > - **Trustworthy numerical movement telemetry (`telemetry_samples`, `telemetry_v2`) and voluntary human labeling (`session_feedback`) are active (Phase 11).**
 > - **Reproducible, leakage-safe ML dataset pipeline (`ml.dataset.build`) is implemented and verified (Phase 12).**
-> - **Strict Phase Boundary**: Zero machine learning model training or inference is implemented in Phase 12. Model development is deferred to **Phase 13**.
+> - **Offline supervised ML baseline and evaluation pipeline (`ml.models.phase13`) is implemented and verified (Phase 13).**
+> - **Strict Phase Boundary**: The machine learning model is developed strictly offline for evaluation and comparison against the rule baseline. Zero runtime ML inference is integrated into live monitoring or WebSockets. Runtime shadow mode is deferred to **Phase 14**.
 
 ---
 
