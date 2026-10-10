@@ -12,7 +12,7 @@ The core objective of Phase 13 is to answer:
 
 ### Project Status Distinction
 It is critical to distinguish three separate milestones:
-1. **ML Training Pipeline Implemented & Tested**: **COMPLETE**. The feature allowlist, leakage-safe scikit-learn preprocessing pipeline, `LogisticRegression` baseline, optional `RandomForestClassifier` challenger, threshold tuning, interpretability ranking, and rule comparison modules are fully implemented with 100% automated test coverage.
+1. **ML Training Pipeline Implemented & Tested**: **COMPLETE**. The feature allowlist, leakage-safe scikit-learn preprocessing pipeline, `LogisticRegression` baseline, optional `RandomForestClassifier` challenger, threshold tuning, interpretability ranking, and rule comparison modules are fully implemented and verified. All 220 executed backend tests passed, with one test skipped. All 114 frontend tests passed, and the frontend production build succeeded.
 2. **Real-Data Model Trained**: **PENDING / BLOCKED**. The current dataset contains eligible non-calibration telemetry from only one student (`Student A`), preventing multi-user split assignment. Consequently, `model.joblib` is **not created** in the canonical experiment output directory (`model_status = "not_trained"`, `model_artifact_created = false`).
 3. **Real-Data Model Scientifically Evaluated**: **PENDING**. Valid scientific evaluation of generalization to unseen students requires multiple distinct students with labeled sessions.
 
